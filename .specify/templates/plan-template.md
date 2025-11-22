@@ -31,7 +31,17 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify compliance with Pixelizer Constitution principles:
+
+- **Separation of Concerns**: Does the design separate Model/View/Controller? Are UI and business logic clearly separated?
+- **Testability**: Can business logic be tested without GUI framework? Are UI components testable?
+- **Code Quality**: Will code follow PEP 8, use type hints, and pass linting?
+- **Error Handling**: Are error boundaries defined? Will users receive clear error messages?
+- **Documentation**: Will public APIs have docstrings? Is architecture documented?
+- **GUI Best Practices**: Is the UI responsive? Are accessibility considerations included?
+- **Dependencies**: Are dependencies minimal and justified? Are versions pinned?
+
+**Violations**: Document any principle violations in Complexity Tracking section below with justification.
 
 ## Project Structure
 
