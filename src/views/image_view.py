@@ -3,7 +3,7 @@
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QSize, Signal, QPoint
-from PySide6.QtGui import QPixmap, QImage, QMouseEvent
+from PySide6.QtGui import QPixmap, QImage, QMouseEvent, QPainter, QColor, QPaintEvent
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget
 
 if TYPE_CHECKING:
@@ -22,6 +22,8 @@ class ImageView(QLabel):
     # Signal emitted when mouse hovers over a pixel
     pixel_color_changed = Signal(str)  # HEX color code
     pixel_color_cleared = Signal()  # Emitted when mouse leaves
+    # Signal emitted when point is clicked during point selection mode
+    point_clicked = Signal(int, int, str)  # x, y, button_type ("left" or "right")
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -37,6 +39,8 @@ class ImageView(QLabel):
         self.setMouseTracking(True)  # Enable mouse tracking for hover
         self._current_pixel_data: Optional[np.ndarray] = None
         self._original_size: Optional[tuple[int, int]] = None
+        self._is_point_selection_mode: bool = False
+        self._point_markers: list[tuple[int, int, str]] = []  # List of (x, y, label) tuples
 
     def display_image(self, pixel_data: np.ndarray, width: int, height: int) -> None:
         """
@@ -191,4 +195,191 @@ class ImageView(QLabel):
         """
         super().leaveEvent(event)
         self.pixel_color_cleared.emit()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """
+        Handle mouse press event for point selection mode.
+
+        Left-click = keep (foreground), right-click = remove (background).
+
+        Args:
+            event: Mouse press event
+        """
+        super().mousePressEvent(event)
+
+        if not self._is_point_selection_mode:
+            return
+
+        if self._current_pixel_data is None or self._original_size is None:
+            return
+
+        if self.pixmap() is None:
+            return
+
+        # Get mouse position relative to widget
+        pos = event.position().toPoint()
+
+        # Get pixmap and its position (centered in widget)
+        pixmap = self.pixmap()
+        pixmap_rect = pixmap.rect()
+        widget_rect = self.rect()
+
+        # Calculate pixmap position (centered)
+        pixmap_x = (widget_rect.width() - pixmap_rect.width()) // 2
+        pixmap_y = (widget_rect.height() - pixmap_rect.height()) // 2
+
+        # Check if mouse is over the pixmap
+        if (
+            pixmap_x <= pos.x() < pixmap_x + pixmap_rect.width()
+            and pixmap_y <= pos.y() < pixmap_y + pixmap_rect.height()
+        ):
+            # Convert widget coordinates to pixmap coordinates
+            pixmap_pos_x = pos.x() - pixmap_x
+            pixmap_pos_y = pos.y() - pixmap_y
+
+            # Convert pixmap coordinates to original image coordinates
+            scale_x = self._original_size[0] / pixmap_rect.width()
+            scale_y = self._original_size[1] / pixmap_rect.height()
+
+            image_x = int(pixmap_pos_x * scale_x)
+            image_y = int(pixmap_pos_y * scale_y)
+
+            # Clamp to valid range
+            image_x = max(0, min(image_x, self._original_size[0] - 1))
+            image_y = max(0, min(image_y, self._original_size[1] - 1))
+
+            # Determine button type and label
+            if event.button() == Qt.MouseButton.LeftButton:
+                button_type = "left"
+                label = "keep"
+            elif event.button() == Qt.MouseButton.RightButton:
+                button_type = "right"
+                label = "remove"
+            else:
+                return  # Ignore other buttons
+
+            # Emit signal with image coordinates
+            self.point_clicked.emit(image_x, image_y, button_type)
+
+    def _convert_view_to_image_coords(self, view_x: int, view_y: int) -> Optional[tuple[int, int]]:
+        """
+        Convert view coordinates to image pixel coordinates.
+
+        Args:
+            view_x: X coordinate in view/widget space
+            view_y: Y coordinate in view/widget space
+
+        Returns:
+            Tuple of (image_x, image_y) in image pixel space, or None if outside image
+        """
+        if self._current_pixel_data is None or self._original_size is None:
+            return None
+
+        if self.pixmap() is None:
+            return None
+
+        pixmap = self.pixmap()
+        pixmap_rect = pixmap.rect()
+        widget_rect = self.rect()
+
+        # Calculate pixmap position (centered)
+        pixmap_x = (widget_rect.width() - pixmap_rect.width()) // 2
+        pixmap_y = (widget_rect.height() - pixmap_rect.height()) // 2
+
+        # Check if point is over the pixmap
+        if (
+            pixmap_x <= view_x < pixmap_x + pixmap_rect.width()
+            and pixmap_y <= view_y < pixmap_y + pixmap_rect.height()
+        ):
+            # Convert widget coordinates to pixmap coordinates
+            pixmap_pos_x = view_x - pixmap_x
+            pixmap_pos_y = view_y - pixmap_y
+
+            # Convert pixmap coordinates to original image coordinates
+            scale_x = self._original_size[0] / pixmap_rect.width()
+            scale_y = self._original_size[1] / pixmap_rect.height()
+
+            image_x = int(pixmap_pos_x * scale_x)
+            image_y = int(pixmap_pos_y * scale_y)
+
+            # Clamp to valid range
+            image_x = max(0, min(image_x, self._original_size[0] - 1))
+            image_y = max(0, min(image_y, self._original_size[1] - 1))
+
+            return (image_x, image_y)
+
+        return None
+
+    def set_point_selection_mode(self, is_active: bool) -> None:
+        """
+        Set point selection mode state.
+
+        Args:
+            is_active: True to enable point selection mode, False to disable
+        """
+        self._is_point_selection_mode = is_active
+        if not is_active:
+            self.clear_markers()
+        self.update()  # Trigger repaint to update visual markers
+
+    def update_point_markers(self, points: list[tuple[int, int, str]]) -> None:
+        """
+        Update visual markers for point selection.
+
+        Args:
+            points: List of (x, y, label) tuples where label is "keep" or "remove"
+        """
+        self._point_markers = points
+        self.update()  # Trigger repaint
+
+    def clear_markers(self) -> None:
+        """Clear all visual markers."""
+        self._point_markers.clear()
+        self.update()  # Trigger repaint
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        """
+        Handle paint event to render visual markers on top of image.
+
+        Args:
+            event: Paint event from Qt
+        """
+        super().paintEvent(event)
+
+        # Only draw markers if in point selection mode and we have markers
+        if not self._is_point_selection_mode or not self._point_markers:
+            return
+
+        if self.pixmap() is None or self._original_size is None:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        pixmap = self.pixmap()
+        pixmap_rect = pixmap.rect()
+        widget_rect = self.rect()
+
+        # Calculate pixmap position (centered)
+        pixmap_x = (widget_rect.width() - pixmap_rect.width()) // 2
+        pixmap_y = (widget_rect.height() - pixmap_rect.height()) // 2
+
+        # Draw markers for each point
+        for image_x, image_y, label in self._point_markers:
+            # Convert image coordinates to view coordinates
+            scale_x = pixmap_rect.width() / self._original_size[0]
+            scale_y = pixmap_rect.height() / self._original_size[1]
+
+            view_x = pixmap_x + int(image_x * scale_x)
+            view_y = pixmap_y + int(image_y * scale_y)
+
+            # Set color based on label
+            if label == "keep":
+                color = QColor(0, 255, 0, 200)  # Green with transparency
+            else:  # remove
+                color = QColor(255, 0, 0, 200)  # Red with transparency
+
+            painter.setPen(QColor(0, 0, 0, 255))  # Black border
+            painter.setBrush(color)
+            painter.drawEllipse(view_x - 8, view_y - 8, 16, 16)  # 16x16 circle
 

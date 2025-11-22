@@ -22,6 +22,10 @@ class ControlsPanel(QWidget):
     pixel_size_changed = Signal(int)  # pixel_size value (1-50)
     sensitivity_changed = Signal(float)  # sensitivity value (0.0-1.0)
     save_requested = Signal()  # Emitted when save button is clicked
+    remove_background_requested = Signal()  # Emitted when remove background button is clicked
+    apply_requested = Signal()  # Emitted when apply button is clicked
+    cancel_requested = Signal()  # Emitted when cancel button is clicked
+    undo_requested = Signal()  # Emitted when undo button is clicked
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -91,6 +95,46 @@ class ControlsPanel(QWidget):
 
         layout.addLayout(sensitivity_row)
 
+        # Add spacing before buttons section
+        layout.addSpacing(12)
+
+        # Remove Background button
+        self._remove_background_button = QPushButton("Remove Background")
+        self._remove_background_button.setObjectName("remove_background_button")
+        self._remove_background_button.clicked.connect(self._on_remove_background_clicked)
+        self._remove_background_button.setVisible(False)  # Hidden initially
+        layout.addWidget(self._remove_background_button)
+        layout.addSpacing(8)  # Spacing after Remove Background button
+
+        # Apply button (for point selection)
+        self._apply_button = QPushButton("Apply")
+        self._apply_button.setObjectName("apply_button")
+        self._apply_button.clicked.connect(self._on_apply_clicked)
+        self._apply_button.setVisible(False)  # Hidden initially
+        self._apply_button.setEnabled(False)  # Disabled until points are selected
+        layout.addWidget(self._apply_button)
+        layout.addSpacing(8)  # Spacing after Apply button
+
+        # Cancel button (for point selection)
+        self._cancel_button = QPushButton("Cancel")
+        self._cancel_button.setObjectName("cancel_button")
+        self._cancel_button.clicked.connect(self._on_cancel_clicked)
+        self._cancel_button.setVisible(False)  # Hidden initially
+        layout.addWidget(self._cancel_button)
+        layout.addSpacing(8)  # Spacing after Cancel button
+
+        # Undo button
+        self._undo_button = QPushButton("Undo")
+        self._undo_button.setObjectName("undo_button")
+        self._undo_button.clicked.connect(self._on_undo_clicked)
+        self._undo_button.setVisible(False)  # Hidden initially
+        self._undo_button.setEnabled(False)  # Disabled when no operations available
+        layout.addWidget(self._undo_button)
+        layout.addSpacing(8)  # Spacing after Undo button
+
+        # Add spacing before Save button
+        layout.addSpacing(8)
+
         # Save button
         self._save_button = QPushButton("Save")
         self._save_button.setObjectName("save_button")
@@ -104,6 +148,34 @@ class ControlsPanel(QWidget):
         self._updating_pixel_size = False
         self._updating_sensitivity = False
 
+    def _on_remove_background_clicked(self) -> None:
+        """Handle remove background button click.
+
+        Emits remove_background_requested signal to trigger point selection mode in controller.
+        """
+        self.remove_background_requested.emit()
+
+    def _on_apply_clicked(self) -> None:
+        """Handle apply button click.
+
+        Emits apply_requested signal to trigger background removal with selected points.
+        """
+        self.apply_requested.emit()
+
+    def _on_cancel_clicked(self) -> None:
+        """Handle cancel button click.
+
+        Emits cancel_requested signal to exit point selection mode.
+        """
+        self.cancel_requested.emit()
+
+    def _on_undo_clicked(self) -> None:
+        """Handle undo button click.
+
+        Emits undo_requested signal to trigger undo operation in controller.
+        """
+        self.undo_requested.emit()
+
     def _on_save_clicked(self) -> None:
         """Handle save button click.
 
@@ -113,12 +185,53 @@ class ControlsPanel(QWidget):
 
     def set_image_loaded(self, is_loaded: bool) -> None:
         """
-        Update save button visibility based on image loaded state.
+        Update button visibility based on image loaded state.
 
         Args:
             is_loaded: True if image is loaded, False otherwise
         """
+        self._remove_background_button.setVisible(is_loaded)
         self._save_button.setVisible(is_loaded)
+        self._undo_button.setVisible(is_loaded)
+        # Apply and Cancel buttons are controlled by point selection mode, not image loaded state
+
+    def set_point_selection_mode(self, is_active: bool) -> None:
+        """
+        Update button states based on point selection mode.
+
+        Args:
+            is_active: True when entering point selection mode, False when exiting
+        """
+        if is_active:
+            # Entering point selection mode: hide Remove Background, show Apply/Cancel
+            self._remove_background_button.setVisible(False)
+            self._apply_button.setVisible(True)
+            self._cancel_button.setVisible(True)
+            self._apply_button.setEnabled(False)  # Disabled until points are selected
+        else:
+            # Exiting point selection mode: show Remove Background, hide Apply/Cancel
+            self._remove_background_button.setVisible(self._save_button.isVisible())  # Show if image is loaded
+            self._apply_button.setVisible(False)
+            self._cancel_button.setVisible(False)
+            self._apply_button.setEnabled(False)
+
+    def update_apply_button_state(self, point_count: int) -> None:
+        """
+        Update Apply button enabled state based on point count.
+
+        Args:
+            point_count: Number of points currently selected
+        """
+        self._apply_button.setEnabled(point_count > 0)
+
+    def update_undo_state(self, can_undo: bool) -> None:
+        """
+        Update Undo button enabled state based on operation history.
+
+        Args:
+            can_undo: True if undo is available, False otherwise
+        """
+        self._undo_button.setEnabled(can_undo)
 
     def _on_pixel_size_slider_changed(self, value: int) -> None:
         """Handle pixel size slider value change.

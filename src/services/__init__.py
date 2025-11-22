@@ -61,3 +61,16 @@ class ImageSaveError(ImageProcessingError):
     """
 
     pass
+
+
+class BackgroundRemovalError(ImageProcessingError):
+    """Exception raised when background removal fails.
+
+    This exception is raised when background removal processing fails due to:
+    - rembg processing errors
+    - Model download failures
+    - Processing failures
+    - Memory issues
+    """
+
+    pass

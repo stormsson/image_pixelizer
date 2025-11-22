@@ -1,11 +1,15 @@
 """Main entry point for Image Pixelizer application."""
 
+import os
 import sys
+from dotenv import load_dotenv
+load_dotenv()
 
 from PySide6.QtWidgets import QApplication
 
 from src.controllers.main_controller import MainController
 from src.models.settings_model import SettingsModel
+from src.services.background_remover import BackgroundRemover
 from src.services.color_reducer import ColorReducer
 from src.services.image_loader import ImageLoader
 from src.services.image_saver import ImageSaver
@@ -25,6 +29,7 @@ def main() -> None:
     pixelizer = Pixelizer()
     color_reducer = ColorReducer()
     image_saver = ImageSaver()
+    background_remover = BackgroundRemover(model=os.getenv('REMBG_MODEL', 'sam'))
 
     # Initialize controller
     controller = MainController(
@@ -33,6 +38,7 @@ def main() -> None:
         pixelizer=pixelizer,
         color_reducer=color_reducer,
         image_saver=image_saver,
+        background_remover=background_remover,
     )
 
     # Initialize and show main window

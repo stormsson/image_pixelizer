@@ -11,6 +11,8 @@ dependencies = [
     "PySide6>=6.6.0",
     "Pillow>=10.0.0",
     "numpy>=1.24.0",
+    "rembg>=2.0.68",
+    "onnxruntime>=1.15.0",
 ]
 
 [project.optional-dependencies]

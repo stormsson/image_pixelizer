@@ -38,6 +38,9 @@ class MainWindow(QMainWindow):
         self._image_view: Optional[ImageView] = None
         self._controls_panel: Optional[ControlsPanel] = None
         self._status_bar: Optional[StatusBar] = None
+        self._current_points: list[tuple[int, int, str]] = []  # Track points for markers
+        self._load_action: Optional[QAction] = None
+        self._save_action: Optional[QAction] = None
 
         self._setup_ui()
         self._connect_signals()
@@ -52,16 +55,16 @@ class MainWindow(QMainWindow):
         file_menu = menubar.addMenu("&File")
 
         # Load image action
-        load_action = QAction("&Load Image...", self)
-        load_action.setShortcut("Ctrl+O")
-        load_action.triggered.connect(self._on_load_image)
-        file_menu.addAction(load_action)
+        self._load_action = QAction("&Load Image...", self)
+        self._load_action.setShortcut("Ctrl+O")
+        self._load_action.triggered.connect(self._on_load_image)
+        file_menu.addAction(self._load_action)
 
         # Save image action
-        save_action = QAction("&Save Image...", self)
-        save_action.setShortcut("Ctrl+S")
-        save_action.triggered.connect(self._on_save_image)
-        file_menu.addAction(save_action)
+        self._save_action = QAction("&Save Image...", self)
+        self._save_action.setShortcut("Ctrl+S")
+        self._save_action.triggered.connect(self._on_save_image)
+        file_menu.addAction(self._save_action)
 
         # Create central widget with layout
         central_widget = QWidget()
@@ -132,6 +135,42 @@ class MainWindow(QMainWindow):
         # Connect controls panel save button to controller
         if self._controls_panel:
             self._controls_panel.save_requested.connect(self._on_save_image)
+            # Connect Remove Background button to enter point selection mode
+            self._controls_panel.remove_background_requested.connect(
+                self._controller.enter_point_selection_mode
+            )
+            # Connect Apply button to apply background removal
+            self._controls_panel.apply_requested.connect(
+                self._controller.apply_background_removal
+            )
+            # Connect Cancel button to cancel point selection
+            self._controls_panel.cancel_requested.connect(
+                self._controller.cancel_point_selection
+            )
+            # Connect Undo button to undo operation
+            self._controls_panel.undo_requested.connect(
+                self._controller.undo_operation
+            )
+
+        # Connect point selection signals
+        if self._image_view:
+            # Connect point_clicked signal from ImageView to controller
+            self._image_view.point_clicked.connect(
+                lambda x, y, button_type: self._controller.add_point(
+                    x, y, "keep" if button_type == "left" else "remove"
+                )
+            )
+
+        # Connect controller point selection signals
+        self._controller.point_selection_mode_active.connect(self._on_point_selection_mode_changed)
+        self._controller.point_added.connect(self._on_point_added)
+
+        # Connect processing state signals
+        self._controller.processing_started.connect(lambda: self.set_ui_enabled(False))
+        self._controller.processing_finished.connect(lambda: self.set_ui_enabled(True))
+
+        # Connect operation history changed signal
+        self._controller.operation_history_changed.connect(self._on_operation_history_changed)
 
     def _on_load_image(self) -> None:
         """Handle load image menu action."""
@@ -183,6 +222,8 @@ class MainWindow(QMainWindow):
         # Update controls panel to show save button
         if self._controls_panel:
             self._controls_panel.set_image_loaded(True)
+            # Update undo button state (should be disabled for new image)
+            self._controls_panel.update_undo_state(False)
 
     def _on_image_updated(self, image: ImageModel) -> None:
         """
@@ -199,6 +240,9 @@ class MainWindow(QMainWindow):
         # Ensure save button remains visible after image updates
         if self._controls_panel:
             self._controls_panel.set_image_loaded(True)
+            # Update undo button state
+            can_undo = self._controller.can_undo()
+            self._controls_panel.update_undo_state(can_undo)
 
     def _on_statistics_updated(self, statistics: ImageStatistics) -> None:
         """
@@ -218,4 +262,81 @@ class MainWindow(QMainWindow):
             error_message: Error message to display
         """
         QMessageBox.critical(self, "Error", error_message)
+
+    def _on_point_selection_mode_changed(self, is_active: bool) -> None:
+        """
+        Handle point selection mode active signal.
+
+        Args:
+            is_active: True when entering mode, False when exiting
+        """
+        if self._image_view:
+            self._image_view.set_point_selection_mode(is_active)
+
+        if self._controls_panel:
+            self._controls_panel.set_point_selection_mode(is_active)
+
+        if not is_active:
+            # Clear points when exiting mode
+            self._current_points.clear()
+            if self._image_view:
+                self._image_view.clear_markers()
+            if self._controls_panel:
+                self._controls_panel.update_apply_button_state(0)
+
+    def _on_point_added(self, x: int, y: int, label: str) -> None:
+        """
+        Handle point added signal.
+
+        Args:
+            x: X coordinate of the point
+            y: Y coordinate of the point
+            label: "keep" or "remove"
+        """
+        # Add point to current points list
+        self._current_points.append((x, y, label))
+
+        # Update visual markers in image view
+        if self._image_view:
+            self._image_view.update_point_markers(self._current_points)
+
+        # Update apply button state in controls panel
+        if self._controls_panel:
+            self._controls_panel.update_apply_button_state(len(self._current_points))
+
+    def _on_operation_history_changed(self) -> None:
+        """Handle operation history changed signal.
+
+        Updates undo button state based on whether undo is available.
+        """
+        if self._controller and self._controls_panel:
+            can_undo = self._controller.can_undo()
+            self._controls_panel.update_undo_state(can_undo)
+
+    def set_ui_enabled(self, enabled: bool) -> None:
+        """
+        Enable or disable all UI controls to prevent user interaction during processing.
+
+        Args:
+            enabled: True to enable UI, False to disable UI
+        """
+        # Enable/disable menu actions
+        if self._load_action:
+            self._load_action.setEnabled(enabled)
+        if self._save_action:
+            self._save_action.setEnabled(enabled)
+
+        # Enable/disable controls panel
+        if self._controls_panel:
+            self._controls_panel.setEnabled(enabled)
+
+        # Enable/disable image view interactions
+        if self._image_view:
+            self._image_view.setEnabled(enabled)
+            # Also disable mouse tracking during processing if disabled
+            if not enabled:
+                self._image_view.setMouseTracking(False)
+            else:
+                # Re-enable mouse tracking if it was enabled before
+                self._image_view.setMouseTracking(True)
 
