@@ -35,18 +35,65 @@ pip install -e ".[dev]"
 - **NumPy** (>=1.24.0): Array operations
 - **rembg** (>=2.0.68): AI-powered background removal
 - **onnxruntime** (>=1.15.0): Required by rembg for AI model inference
+- **openai** (>=1.0.0): OpenAI Python SDK for automatic background removal
+- **python-dotenv** (>=1.0.0): Environment variable management
 
-### Background Removal Models
+### Background Removal Methods
 
-The application supports multiple background removal models:
+The application supports two background removal methods:
 
+**1. Interactive Method (rembg with SAM):**
 - **u2net** (default): Automatic background removal, fast and accurate
-- **sam**: Segment Anything Model - more precise but slower
+- **sam**: Segment Anything Model - requires point selection, more precise
 - **u2netp**: Lightweight version, faster processing
 - **u2net_human_seg**: Optimized for human subjects
 - **silueta**: Alternative model
 
 To use SAM or other models, see [SAM Setup Checklist](docs/SAM_SETUP_CHECKLIST.md).
+
+**2. Automatic Method (OpenAI API):**
+- One-click automatic background removal
+- No point selection required
+- Uses OpenAI Vision API + rembg for processing
+- Requires OpenAI API key (see setup below)
+
+### OpenAI API Setup (Automatic Background Removal)
+
+The automatic background removal method requires an OpenAI API key:
+
+1. **Get an API Key:**
+   - Sign up at https://platform.openai.com/
+   - Navigate to https://platform.openai.com/api-keys
+   - Create a new API key
+   - Copy the key (starts with "sk-")
+
+2. **Configure Environment:**
+   - Create a `.env` file in the project root (if it doesn't exist)
+   - Add your API key:
+     ```bash
+     OPENAI_API_KEY=sk-your-actual-api-key-here
+     ```
+   - The `.env` file is gitignored and should never be committed
+
+3. **Verify Setup:**
+   - Run the application: `python main.py`
+   - The "Remove Background (Automatic)" button will be available if the API key is configured
+   - If the API key is missing, the button will not appear (graceful degradation)
+
+**Note:** 
+- Each API call incurs costs based on OpenAI pricing
+- Subject to OpenAI API rate limits (varies by plan)
+- Requires internet connection for API calls
+- Check your rate limits at https://platform.openai.com/account/rate-limits
+
+**Example .env file:**
+```bash
+# OpenAI API Configuration
+OPENAI_API_KEY=sk-your-api-key-here
+
+# Optional: rembg model selection
+REMBG_MODEL=sam
+```
 
 ### First-Time Setup
 
@@ -67,7 +114,9 @@ For detailed usage instructions, see:
 
 - Image pixelization with adjustable pixel size
 - Color reduction with sensitivity control
-- Background removal using AI (rembg)
+- Background removal using AI:
+  - **Interactive method**: Point-based selection with rembg (SAM model)
+  - **Automatic method**: One-click removal using OpenAI API + rembg
 - Undo operation support (up to 20 operations)
 - Save processed images as PNG with transparency support
 

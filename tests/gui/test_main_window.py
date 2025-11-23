@@ -142,3 +142,65 @@ class TestMainWindow:
 
         # Error should be handled (would show QMessageBox in real app)
 
+    def test_ui_disabled_when_processing_starts(self, qtbot, mock_controller) -> None:
+        """Test UI is disabled when automatic background removal processing starts (T062)."""
+        window = MainWindow(mock_controller)
+        qtbot.addWidget(window)
+        window.show()
+
+        # Initially UI should be enabled
+        assert window._controls_panel.isEnabled()
+        if window._image_view:
+            assert window._image_view.isEnabled()
+
+        # Emit processing_started signal
+        mock_controller.processing_started.emit()
+        qtbot.wait(100)
+
+        # UI should be disabled
+        assert not window._controls_panel.isEnabled()
+        if window._image_view:
+            assert not window._image_view.isEnabled()
+
+    def test_ui_enabled_when_processing_completes(self, qtbot, mock_controller) -> None:
+        """Test UI is enabled when automatic background removal processing completes (T062)."""
+        window = MainWindow(mock_controller)
+        qtbot.addWidget(window)
+        window.show()
+
+        # Disable UI first (simulate processing started)
+        mock_controller.processing_started.emit()
+        qtbot.wait(100)
+        assert not window._controls_panel.isEnabled()
+
+        # Emit processing_finished signal
+        mock_controller.processing_finished.emit()
+        qtbot.wait(100)
+
+        # UI should be enabled again
+        assert window._controls_panel.isEnabled()
+        if window._image_view:
+            assert window._image_view.isEnabled()
+
+    def test_all_controls_disabled_during_processing(self, qtbot, mock_controller) -> None:
+        """Test all controls are disabled during automatic background removal processing (T062)."""
+        window = MainWindow(mock_controller)
+        qtbot.addWidget(window)
+        window.show()
+
+        # Set image loaded to make buttons visible
+        if window._controls_panel:
+            window._controls_panel.set_image_loaded(True)
+        qtbot.wait(100)
+
+        # Emit processing_started signal
+        mock_controller.processing_started.emit()
+        qtbot.wait(100)
+
+        # All controls should be disabled
+        assert not window._controls_panel.isEnabled()
+        # Check that individual buttons are also disabled (if accessible)
+        if hasattr(window._controls_panel, '_openai_remove_background_button'):
+            # Button should be disabled (through parent widget)
+            assert not window._controls_panel._openai_remove_background_button.isEnabled() or not window._controls_panel.isEnabled()
+

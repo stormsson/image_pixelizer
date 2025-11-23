@@ -2,6 +2,8 @@
 
 from typing import Optional, TYPE_CHECKING
 
+import numpy as np
+from PIL import Image as PILImage
 from PySide6.QtCore import QObject, Signal, QThread
 
 from src.models.image_model import ImageModel, ImageStatistics
@@ -14,6 +16,7 @@ if TYPE_CHECKING:
     from src.services.image_loader import ImageLoader
     from src.services.image_saver import ImageSaver
     from src.services.operation_history import OperationHistoryManager
+    from src.services.openai_background_remover import OpenAIBackgroundRemover
     from src.services.pixelizer import Pixelizer
 
 
@@ -42,6 +45,7 @@ class MainController(QObject):
         pixelizer: Optional["Pixelizer"] = None,
         color_reducer=None,  # ColorReducer - will be set later
         background_remover: Optional["BackgroundRemover"] = None,
+        openai_background_remover: Optional["OpenAIBackgroundRemover"] = None,
     ) -> None:
         """
         Initialize controller with dependencies.
@@ -53,7 +57,8 @@ class MainController(QObject):
             image_saver: Image saving service
             pixelizer: Pixelization service
             color_reducer: Color reduction service
-            background_remover: Background removal service
+            background_remover: Background removal service (interactive)
+            openai_background_remover: OpenAI background removal service (automatic)
         """
         super().__init__()
         self._image_model = image_model
@@ -63,13 +68,19 @@ class MainController(QObject):
         self._pixelizer = pixelizer
         self._color_reducer = color_reducer
         self._background_remover = background_remover
+        self._openai_background_remover = openai_background_remover
         self._statistics: Optional[ImageStatistics] = None
         self._background_removal_thread: Optional[QThread] = None
         self._background_removal_worker: Optional["BackgroundRemovalWorker"] = None
+        self._openai_background_removal_thread: Optional[QThread] = None
+        self._openai_background_removal_worker: Optional["OpenAIBackgroundRemovalWorker"] = None
         self._point_selection_collection = PointSelectionCollection()
         # Initialize operation history manager
         from src.services.operation_history import OperationHistoryManager
         self._operation_history = OperationHistoryManager()
+        # Track base image state (after background removal, before pixelization)
+        # This allows pixelization to be non-destructive and reversible
+        self._base_image_state: Optional[ImageModel] = None
 
 
     @property
@@ -107,6 +118,15 @@ class MainController(QObject):
         try:
             image = self._image_loader.load_image(file_path)
             self._image_model = image
+            # Set base image state to loaded image (before any operations)
+            self._base_image_state = ImageModel(
+                width=image.width,
+                height=image.height,
+                pixel_data=image.pixel_data.copy(),
+                original_pixel_data=image.original_pixel_data.copy(),
+                format=image.format,
+                has_alpha=image.has_alpha,
+            )
             # Clear operation history when new image is loaded
             self._operation_history.clear()
             self.operation_history_changed.emit()
@@ -186,18 +206,35 @@ class MainController(QObject):
             self._settings_model.pixelization.pixel_size = pixel_size
             self._settings_model.pixelization.is_enabled = pixel_size > 1
 
-            # Always start from original image for pixelization
-            original_image = ImageModel(
-                width=self._image_model.width,
-                height=self._image_model.height,
-                pixel_data=self._image_model.original_pixel_data.copy(),
-                original_pixel_data=self._image_model.original_pixel_data.copy(),
-                format=self._image_model.format,
-                has_alpha=self._image_model.has_alpha,
-            )
+            # Pixelization should be non-destructive: always start from base state
+            # Base state is the image after background removal (if any), before pixelization
+            if self._base_image_state is None:
+                # Fallback: use current state if base state not set
+                base_image = ImageModel(
+                    width=self._image_model.width,
+                    height=self._image_model.height,
+                    pixel_data=self._image_model.pixel_data.copy(),
+                    original_pixel_data=self._image_model.original_pixel_data.copy(),
+                    format=self._image_model.format,
+                    has_alpha=self._image_model.has_alpha,
+                )
+            else:
+                # Use base state (image after background removal, before pixelization)
+                base_image = ImageModel(
+                    width=self._base_image_state.width,
+                    height=self._base_image_state.height,
+                    pixel_data=self._base_image_state.pixel_data.copy(),
+                    original_pixel_data=self._base_image_state.original_pixel_data.copy(),
+                    format=self._base_image_state.format,
+                    has_alpha=self._base_image_state.has_alpha,
+                )
 
-            # Apply pixelization on original image
-            pixelized_image = self._pixelizer.pixelize(original_image, pixel_size)
+            # If pixel_size is 1, restore to base state (no pixelization)
+            if pixel_size == 1:
+                pixelized_image = base_image
+            else:
+                # Apply pixelization on base image state
+                pixelized_image = self._pixelizer.pixelize(base_image, pixel_size)
 
             # Apply color reduction if enabled (after pixelization)
             if (
@@ -258,27 +295,41 @@ class MainController(QObject):
             self._settings_model.color_reduction.sensitivity = sensitivity
             self._settings_model.color_reduction.is_enabled = sensitivity > 0.0
 
-            # Always start from original image
-            original_image = ImageModel(
-                width=self._image_model.width,
-                height=self._image_model.height,
-                pixel_data=self._image_model.original_pixel_data.copy(),
-                original_pixel_data=self._image_model.original_pixel_data.copy(),
-                format=self._image_model.format,
-                has_alpha=self._image_model.has_alpha,
-            )
+            # Color reduction should work on the pixelized base state (if pixelization enabled)
+            # or on the base state directly (if pixelization disabled)
+            if self._base_image_state is None:
+                # Fallback: use current state if base state not set
+                base_image = ImageModel(
+                    width=self._image_model.width,
+                    height=self._image_model.height,
+                    pixel_data=self._image_model.pixel_data.copy(),
+                    original_pixel_data=self._image_model.original_pixel_data.copy(),
+                    format=self._image_model.format,
+                    has_alpha=self._image_model.has_alpha,
+                )
+            else:
+                # Use base state (image after background removal, before pixelization)
+                base_image = ImageModel(
+                    width=self._base_image_state.width,
+                    height=self._base_image_state.height,
+                    pixel_data=self._base_image_state.pixel_data.copy(),
+                    original_pixel_data=self._base_image_state.original_pixel_data.copy(),
+                    format=self._base_image_state.format,
+                    has_alpha=self._base_image_state.has_alpha,
+                )
 
-            # If pixelization is enabled, apply it first on original
+            # If pixelization is enabled, apply it first on base state
             if (
                 self._pixelizer is not None
                 and self._settings_model.pixelization.is_enabled
             ):
                 pixel_size = self._settings_model.pixelization.pixel_size
-                original_image = self._pixelizer.pixelize(original_image, pixel_size)
+                if pixel_size > 1:
+                    base_image = self._pixelizer.pixelize(base_image, pixel_size)
 
             # Apply color reduction
             reduced_image = self._color_reducer.reduce_colors(
-                original_image, sensitivity
+                base_image, sensitivity
             )
 
             # Update model (preserve original_pixel_data)
@@ -568,8 +619,13 @@ class MainController(QObject):
 
     def _on_thread_finished(self) -> None:
         """Handle thread finished signal - cleanup references."""
-        self._background_removal_thread = None
-        self._background_removal_worker = None
+        # Check which thread finished and clean up accordingly
+        if self._background_removal_thread is not None and not self._background_removal_thread.isRunning():
+            self._background_removal_thread = None
+            self._background_removal_worker = None
+        if self._openai_background_removal_thread is not None and not self._openai_background_removal_thread.isRunning():
+            self._openai_background_removal_thread = None
+            self._openai_background_removal_worker = None
 
     def wait_for_background_removal(self, timeout: int = 5000) -> bool:
         """
@@ -600,6 +656,33 @@ class MainController(QObject):
             format=processed_image.format,
             has_alpha=processed_image.has_alpha,
         )
+
+        # Update base image state (background removal is destructive, so this becomes the new base)
+        # Pixelization will now work from this new base state
+        self._base_image_state = ImageModel(
+            width=processed_image.width,
+            height=processed_image.height,
+            pixel_data=processed_image.pixel_data.copy(),
+            original_pixel_data=self._image_model.original_pixel_data.copy(),
+            format=processed_image.format,
+            has_alpha=processed_image.has_alpha,
+        )
+
+        # Reapply pixelization and color reduction if they were enabled
+        # This ensures the display shows the correct state after background removal
+        if self._pixelizer is not None and self._settings_model.pixelization.is_enabled:
+            pixel_size = self._settings_model.pixelization.pixel_size
+            if pixel_size > 1:
+                self._image_model = self._pixelizer.pixelize(self._base_image_state, pixel_size)
+                # Apply color reduction if enabled
+                if (
+                    self._color_reducer is not None
+                    and self._settings_model.color_reduction.is_enabled
+                ):
+                    sensitivity = self._settings_model.color_reduction.sensitivity
+                    self._image_model = self._color_reducer.reduce_colors(
+                        self._image_model, sensitivity
+                    )
 
         # Update statistics
         self._update_statistics()
@@ -660,11 +743,24 @@ class MainController(QObject):
             has_alpha=entry.image_state.has_alpha,
         )
 
+        # Update base image state (restored state becomes the new base for pixelization)
+        self._base_image_state = ImageModel(
+            width=restored_image.width,
+            height=restored_image.height,
+            pixel_data=restored_image.pixel_data.copy(),
+            original_pixel_data=restored_image.original_pixel_data.copy(),
+            format=restored_image.format,
+            has_alpha=restored_image.has_alpha,
+        )
+
         # Reapply slider-based changes (pixelization and color reduction)
-        # These are preserved and reapplied after undo
+        # These are preserved and reapplied after undo, working from the restored base state
         if self._pixelizer is not None and self._settings_model.pixelization.is_enabled:
             pixel_size = self._settings_model.pixelization.pixel_size
-            restored_image = self._pixelizer.pixelize(restored_image, pixel_size)
+            if pixel_size > 1:
+                restored_image = self._pixelizer.pixelize(self._base_image_state, pixel_size)
+            else:
+                restored_image = self._base_image_state
 
         if (
             self._color_reducer is not None
@@ -702,6 +798,134 @@ class MainController(QObject):
         self.operation_history_changed.emit()
 
 
+    def remove_background_automatic(self) -> None:
+        """
+        Remove background from current image using OpenAIBackgroundRemover service.
+
+        Uses QThread worker to maintain UI responsiveness during processing.
+        This method is for automatic background removal (no point selection).
+
+        Emits:
+            image_updated: When background removal is complete
+            error_occurred: If background removal fails
+        """
+        if self._image_model is None:
+            self.error_occurred.emit("No image to process. Please load an image first.")
+            return
+
+        if self._openai_background_remover is None:
+            self.error_occurred.emit("OpenAI background remover not initialized")
+            return
+
+        # Exit point selection mode if active (per spec FR-016)
+        if self._point_selection_collection.is_active:
+            self.exit_point_selection_mode()
+
+        # Don't start new operation if one is already in progress
+        if self._openai_background_removal_thread is not None and self._openai_background_removal_thread.isRunning():
+            return
+
+        # Save current image state to operation history before applying operation
+        import copy
+        current_state = ImageModel(
+            width=self._image_model.width,
+            height=self._image_model.height,
+            pixel_data=self._image_model.pixel_data.copy(),
+            original_pixel_data=self._image_model.original_pixel_data.copy(),
+            format=self._image_model.format,
+            has_alpha=self._image_model.has_alpha,
+        )
+        self._operation_history.add_operation("remove_background_automatic", current_state)
+        self.operation_history_changed.emit()
+
+        # Create worker and thread for background processing
+        worker = OpenAIBackgroundRemovalWorker(self._openai_background_remover, self._image_model)
+        thread = QThread(self)  # Set controller as parent for automatic cleanup
+        worker.moveToThread(thread)
+
+        # Connect signals
+        thread.started.connect(worker.process)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._on_thread_finished)
+        worker.result_ready.connect(self._on_openai_background_removal_complete)
+        worker.error_occurred.connect(self._on_openai_background_removal_error)
+
+        # Store references
+        self._openai_background_removal_thread = thread
+        self._openai_background_removal_worker = worker
+
+        # Emit processing started signal
+        self.processing_started.emit()
+
+        # Start thread
+        thread.start()
+
+    def _on_openai_background_removal_complete(self, processed_image: ImageModel) -> None:
+        """Handle successful OpenAI background removal.
+
+        Args:
+            processed_image: Processed ImageModel with background removed
+        """
+        # Update model (preserve original_pixel_data)
+        self._image_model = ImageModel(
+            width=processed_image.width,
+            height=processed_image.height,
+            pixel_data=processed_image.pixel_data,
+            original_pixel_data=self._image_model.original_pixel_data.copy() if self._image_model else processed_image.original_pixel_data.copy(),
+            format=processed_image.format,
+            has_alpha=processed_image.has_alpha,
+        )
+
+        # Update base image state (background removal is destructive, so this becomes the new base)
+        # Pixelization will now work from this new base state
+        self._base_image_state = ImageModel(
+            width=processed_image.width,
+            height=processed_image.height,
+            pixel_data=processed_image.pixel_data.copy(),
+            original_pixel_data=self._image_model.original_pixel_data.copy(),
+            format=processed_image.format,
+            has_alpha=processed_image.has_alpha,
+        )
+
+        # Reapply pixelization and color reduction if they were enabled
+        # This ensures the display shows the correct state after background removal
+        if self._pixelizer is not None and self._settings_model.pixelization.is_enabled:
+            pixel_size = self._settings_model.pixelization.pixel_size
+            if pixel_size > 1:
+                self._image_model = self._pixelizer.pixelize(self._base_image_state, pixel_size)
+                # Apply color reduction if enabled
+                if (
+                    self._color_reducer is not None
+                    and self._settings_model.color_reduction.is_enabled
+                ):
+                    sensitivity = self._settings_model.color_reduction.sensitivity
+                    self._image_model = self._color_reducer.reduce_colors(
+                        self._image_model, sensitivity
+                    )
+
+        # Update statistics
+        self._update_statistics()
+
+        # Emit signals
+        self.image_updated.emit(self._image_model)
+        if self._statistics:
+            self.statistics_updated.emit(self._statistics)
+
+        # Emit processing finished signal
+        self.processing_finished.emit()
+
+    def _on_openai_background_removal_error(self, error_message: str) -> None:
+        """Handle OpenAI background removal error.
+
+        Args:
+            error_message: Error message to display
+        """
+        self.error_occurred.emit(error_message)
+        self.processing_finished.emit()
+
+
 class BackgroundRemovalWorker(QObject):
     """Worker for background removal processing in QThread."""
 
@@ -734,6 +958,59 @@ class BackgroundRemovalWorker(QObject):
         """Process background removal in worker thread."""
         try:
             processed_image = self._background_remover.remove_background(self._image, prompts=self._prompts)
+            self.result_ready.emit(processed_image)
+        except Exception as e:
+            error_msg = str(e)
+            if hasattr(e, "user_message"):
+                error_msg = e.user_message
+            self.error_occurred.emit(error_msg)
+        finally:
+            self.finished.emit()
+
+
+class OpenAIBackgroundRemovalWorker(QObject):
+    """Worker for OpenAI background removal processing in QThread."""
+
+    result_ready = Signal(ImageModel)
+    error_occurred = Signal(str)
+    finished = Signal()
+
+    def __init__(
+        self,
+        openai_background_remover: "OpenAIBackgroundRemover",
+        image: ImageModel,
+        parent: Optional[QObject] = None,
+    ) -> None:
+        """
+        Initialize OpenAI background removal worker.
+
+        Args:
+            openai_background_remover: OpenAIBackgroundRemover service instance
+            image: ImageModel to process
+            parent: Parent QObject
+        """
+        super().__init__(parent)
+        self._openai_background_remover = openai_background_remover
+        self._image = image
+
+    def process(self) -> None:
+        """Process OpenAI background removal in worker thread."""
+        try:
+            processed_image = self._openai_background_remover.remove_background(self._image)
+            if not isinstance(processed_image, ImageModel):
+                # Convert to ImageModel if needed
+                if isinstance(processed_image, PILImage.Image):
+                    result_array = np.array(processed_image)
+                    processed_image = ImageModel(
+                        width=self._image.width,
+                        height=self._image.height,
+                        pixel_data=result_array,
+                        original_pixel_data=self._image.original_pixel_data.copy(),
+                        format=self._image.format,
+                        has_alpha=True,
+                    )
+                else:
+                    raise ValueError("Unexpected return type from remove_background")
             self.result_ready.emit(processed_image)
         except Exception as e:
             error_msg = str(e)

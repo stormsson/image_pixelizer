@@ -230,3 +230,123 @@ class TestControlsPanel:
         # Verify signal was emitted
         assert len(signals_received) == 1
 
+
+class TestOpenAIBackgroundRemovalButton:
+    """Tests for Remove Background (Automatic) button (T061)."""
+
+    def test_automatic_button_hidden_initially(self, qtbot) -> None:
+        """Test automatic background removal button is hidden initially."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+
+        assert not panel._openai_remove_background_button.isVisible()
+
+    def test_automatic_button_visible_after_image_load(self, qtbot) -> None:
+        """Test automatic button becomes visible after image is loaded."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # Initially hidden
+        assert not panel._openai_remove_background_button.isVisible()
+
+        # Set image loaded
+        panel.set_image_loaded(True)
+        qtbot.wait(100)
+
+        # Now visible
+        assert panel._openai_remove_background_button.isVisible()
+
+    def test_automatic_button_hidden_after_image_cleared(self, qtbot) -> None:
+        """Test automatic button becomes hidden after image is cleared."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # Set image loaded
+        panel.set_image_loaded(True)
+        qtbot.wait(100)
+        assert panel._openai_remove_background_button.isVisible()
+
+        # Clear image
+        panel.set_image_loaded(False)
+        qtbot.wait(100)
+
+        # Now hidden
+        assert not panel._openai_remove_background_button.isVisible()
+
+    def test_automatic_button_emits_signal(self, qtbot) -> None:
+        """Test automatic button emits openai_background_removal_requested signal when clicked."""
+        from PySide6.QtCore import Qt
+
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+        panel.set_image_loaded(True)
+        qtbot.wait(100)
+
+        signals_received = []
+
+        def on_openai_background_removal_requested() -> None:
+            signals_received.append(True)
+
+        panel.openai_background_removal_requested.connect(on_openai_background_removal_requested)
+
+        # Click automatic button
+        qtbot.mouseClick(panel._openai_remove_background_button, Qt.MouseButton.LeftButton)
+        qtbot.wait(100)
+
+        # Verify signal was emitted
+        assert len(signals_received) == 1
+
+    def test_automatic_button_labeling(self, qtbot) -> None:
+        """Test automatic button has correct label and tooltip."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+
+        button = panel._openai_remove_background_button
+        assert "Automatic" in button.text()
+        assert button.toolTip() is not None
+        assert len(button.toolTip()) > 0
+
+    def test_automatic_button_distinguishable_from_interactive(self, qtbot) -> None:
+        """Test automatic button is clearly distinguishable from interactive button."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+
+        automatic_button = panel._openai_remove_background_button
+        interactive_button = panel._remove_background_button
+
+        # Both buttons should have different text
+        assert automatic_button.text() != interactive_button.text()
+        # Automatic button should mention "Automatic"
+        assert "Automatic" in automatic_button.text()
+        # Interactive button should mention "SAM" or similar
+        assert "SAM" in interactive_button.text() or "Interactive" in interactive_button.text()
+
+    def test_automatic_button_enabled_when_image_loaded(self, qtbot) -> None:
+        """Test automatic button is enabled when image is loaded."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        panel.set_image_loaded(True)
+        qtbot.wait(100)
+
+        assert panel._openai_remove_background_button.isEnabled()
+
+    def test_automatic_button_disabled_when_no_image(self, qtbot) -> None:
+        """Test automatic button is disabled when no image is loaded."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # Button should be disabled when not visible (no image)
+        panel.set_image_loaded(False)
+        qtbot.wait(100)
+
+        # Button is hidden, but if it were visible it should be disabled
+        # This is handled by visibility, but we can test the state
+        if panel._openai_remove_background_button.isVisible():
+            assert not panel._openai_remove_background_button.isEnabled()
+

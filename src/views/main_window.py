@@ -139,6 +139,10 @@ class MainWindow(QMainWindow):
             self._controls_panel.remove_background_requested.connect(
                 self._controller.enter_point_selection_mode
             )
+            # Connect Automatic Remove Background button to automatic removal
+            self._controls_panel.openai_background_removal_requested.connect(
+                self._controller.remove_background_automatic
+            )
             # Connect Apply button to apply background removal
             self._controls_panel.apply_requested.connect(
                 self._controller.apply_background_removal

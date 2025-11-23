@@ -23,6 +23,7 @@ class ControlsPanel(QWidget):
     sensitivity_changed = Signal(float)  # sensitivity value (0.0-1.0)
     save_requested = Signal()  # Emitted when save button is clicked
     remove_background_requested = Signal()  # Emitted when remove background button is clicked
+    openai_background_removal_requested = Signal()  # Emitted when automatic remove background button is clicked
     apply_requested = Signal()  # Emitted when apply button is clicked
     cancel_requested = Signal()  # Emitted when cancel button is clicked
     undo_requested = Signal()  # Emitted when undo button is clicked
@@ -98,13 +99,23 @@ class ControlsPanel(QWidget):
         # Add spacing before buttons section
         layout.addSpacing(12)
 
-        # Remove Background button
+        # Remove Background button (interactive)
         self._remove_background_button = QPushButton("Remove Background(SAM)")
         self._remove_background_button.setObjectName("remove_background_button")
+        self._remove_background_button.setToolTip("Interactive background removal with point selection")
         self._remove_background_button.clicked.connect(self._on_remove_background_clicked)
         self._remove_background_button.setVisible(False)  # Hidden initially
         layout.addWidget(self._remove_background_button)
         layout.addSpacing(8)  # Spacing after Remove Background button
+
+        # Remove Background (Automatic) button
+        self._openai_remove_background_button = QPushButton("Remove Background (OpenAI)")
+        self._openai_remove_background_button.setObjectName("openai_remove_background_button")
+        self._openai_remove_background_button.setToolTip("Automatic background removal using AI (no point selection required)")
+        self._openai_remove_background_button.clicked.connect(self._on_openai_remove_background_clicked)
+        self._openai_remove_background_button.setVisible(False)  # Hidden initially
+        layout.addWidget(self._openai_remove_background_button)
+        layout.addSpacing(8)  # Spacing after Automatic Remove Background button
 
         # Apply button (for point selection)
         self._apply_button = QPushButton("Apply")
@@ -155,6 +166,13 @@ class ControlsPanel(QWidget):
         """
         self.remove_background_requested.emit()
 
+    def _on_openai_remove_background_clicked(self) -> None:
+        """Handle automatic remove background button click.
+
+        Emits openai_background_removal_requested signal to trigger automatic background removal.
+        """
+        self.openai_background_removal_requested.emit()
+
     def _on_apply_clicked(self) -> None:
         """Handle apply button click.
 
@@ -191,6 +209,7 @@ class ControlsPanel(QWidget):
             is_loaded: True if image is loaded, False otherwise
         """
         self._remove_background_button.setVisible(is_loaded)
+        self._openai_remove_background_button.setVisible(is_loaded)
         self._save_button.setVisible(is_loaded)
         self._undo_button.setVisible(is_loaded)
         # Apply and Cancel buttons are controlled by point selection mode, not image loaded state
@@ -209,8 +228,9 @@ class ControlsPanel(QWidget):
             self._cancel_button.setVisible(True)
             self._apply_button.setEnabled(False)  # Disabled until points are selected
         else:
-            # Exiting point selection mode: show Remove Background, hide Apply/Cancel
+            # Exiting point selection mode: show Remove Background buttons, hide Apply/Cancel
             self._remove_background_button.setVisible(self._save_button.isVisible())  # Show if image is loaded
+            self._openai_remove_background_button.setVisible(self._save_button.isVisible())  # Show if image is loaded
             self._apply_button.setVisible(False)
             self._cancel_button.setVisible(False)
             self._apply_button.setEnabled(False)

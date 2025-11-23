@@ -74,3 +74,32 @@ class BackgroundRemovalError(ImageProcessingError):
     """
 
     pass
+
+
+class OpenAIBackgroundRemovalError(ImageProcessingError):
+    """Exception raised when OpenAI background removal fails.
+
+    This exception is raised when OpenAI background removal processing fails due to:
+    - API key missing or invalid
+    - Network errors
+    - API rate limits
+    - API errors
+    - Processing failures
+
+    Attributes:
+        user_message: User-friendly error message suitable for display in dialogs.
+        technical_message: Technical error message for logging/debugging.
+    """
+
+    def __init__(
+        self, technical_message: str, user_message: Optional[str] = None
+    ) -> None:
+        """Initialize OpenAI background removal error.
+
+        Args:
+            technical_message: Technical error message for logging/debugging.
+            user_message: Optional user-friendly message. If not provided,
+                uses the technical message.
+        """
+        super().__init__(technical_message, user_message)
+        self.technical_message = technical_message
