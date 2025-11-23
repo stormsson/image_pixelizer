@@ -99,7 +99,7 @@ class ControlsPanel(QWidget):
         layout.addSpacing(12)
 
         # Remove Background button
-        self._remove_background_button = QPushButton("Remove Background")
+        self._remove_background_button = QPushButton("Remove Background(SAM)")
         self._remove_background_button.setObjectName("remove_background_button")
         self._remove_background_button.clicked.connect(self._on_remove_background_clicked)
         self._remove_background_button.setVisible(False)  # Hidden initially
