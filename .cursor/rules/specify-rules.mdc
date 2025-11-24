@@ -7,6 +7,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-22
 - File system (save processed images as PNG files; no database or persistent state required). SAM model files cached locally after first download. (002-image-operations)
 - Python 3.11+ + PySide6 (Qt6 bindings), Pillow (PIL) for image processing, NumPy for efficient pixel manipulation, rembg for AI-powered background removal (002-image-operations)
 - File system (save processed images as PNG files; no database or persistent state required). Operation history maintained in memory during session. (002-image-operations)
+- Python 3.11+ + PySide6 (GUI framework), NumPy (image processing), Pillow (PIL) for image I/O (004-photo-editing-tools)
+- In-memory image data processing, no persistent storage required (004-photo-editing-tools)
 
 - Python 3.11+ + PySide6 (Qt6 bindings), Pillow (PIL) for image processing, NumPy for efficient pixel manipulation (001-image-pixelizer)
 
@@ -26,10 +28,10 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 004-photo-editing-tools: Added Python 3.11+ + PySide6 (GUI framework), NumPy (image processing), Pillow (PIL) for image I/O
 - 002-image-operations: Added Python 3.11+ + PySide6 (Qt6 bindings), Pillow (PIL) for image processing, NumPy for efficient pixel manipulation, rembg for AI-powered background removal
 - 002-image-operations: Added Python 3.11+ + PySide6 (Qt6 bindings), Pillow (PIL) for image processing, NumPy for efficient pixel manipulation, SAM (Segment Anything Model) for image segmentation, torch/torchvision for SAM model loading and inference
 
-- 001-image-pixelizer: Added Python 3.11+ + PySide6 (Qt6 bindings), Pillow (PIL) for image processing, NumPy for efficient pixel manipulation
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

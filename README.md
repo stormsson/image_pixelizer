@@ -110,6 +110,34 @@ For detailed usage instructions, see:
 - [Quickstart Guide](specs/002-image-operations/quickstart.md) - User workflow for image operations
 - [Specification](specs/002-image-operations/spec.md) - Feature requirements
 
+### Using Image Levels Tool
+
+The Image Levels tool allows you to adjust the tonal distribution of your image by clipping highlights and shadows.
+
+**To access Image Levels:**
+1. Load an image using "File > Load Image..." (or Ctrl+O)
+2. Select "Photographic Editing Tools > Image Levels" from the menu bar
+3. A new window will open displaying a histogram of your image's tonal distribution
+
+**Using the tool:**
+- **Histogram**: Shows the distribution of tones in your image
+  - Dark tones appear on the left
+  - Light tones appear on the right
+  - Bar height represents pixel frequency at each tone level
+- **Darks Cutoff slider**: Adjusts the percentage of darkest pixels to replace with black (0-100%)
+  - Higher values clip more shadows, increasing contrast
+  - Example: Setting to 5% replaces the darkest 5% of pixels with black
+- **Lights Cutoff slider**: Adjusts the percentage of lightest pixels to replace with white (0-100%)
+  - Higher values clip more highlights, increasing contrast
+  - Example: Setting to 10% replaces the lightest 10% of pixels with white
+
+**Tips:**
+- Adjustments are applied in real-time as you move the sliders
+- The histogram updates to reflect changes in the adjusted image
+- Both sliders can be used together for maximum contrast control
+- Changes are tracked in operation history and can be undone
+- Close the window to keep your adjustments applied
+
 ## Features
 
 - Image pixelization with adjustable pixel size
@@ -117,6 +145,8 @@ For detailed usage instructions, see:
 - Background removal using AI:
   - **Interactive method**: Point-based selection with rembg (SAM model)
   - **Automatic method**: One-click removal using OpenAI API + rembg
+- **Photographic editing tools**:
+  - **Image Levels**: Adjust tonal distribution with histogram visualization
 - Undo operation support (up to 20 operations)
 - Save processed images as PNG with transparency support
 

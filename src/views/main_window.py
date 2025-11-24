@@ -17,6 +17,7 @@ from src.controllers.main_controller import MainController
 from src.models.image_model import ImageModel, ImageStatistics
 from src.views.controls_panel import ControlsPanel
 from src.views.image_view import ImageView
+from src.views.levels_window import LevelsWindow
 from src.views.status_bar import StatusBar
 
 
@@ -41,6 +42,8 @@ class MainWindow(QMainWindow):
         self._current_points: list[tuple[int, int, str]] = []  # Track points for markers
         self._load_action: Optional[QAction] = None
         self._save_action: Optional[QAction] = None
+        self._levels_action: Optional[QAction] = None
+        self._levels_window = None
 
         self._setup_ui()
         self._connect_signals()
@@ -65,6 +68,19 @@ class MainWindow(QMainWindow):
         self._save_action.setShortcut("Ctrl+S")
         self._save_action.triggered.connect(self._on_save_image)
         file_menu.addAction(self._save_action)
+
+        # Photographic Editing Tools menu
+        editing_menu = menubar.addMenu("&Photographic Editing Tools")
+        
+        # Image Levels action
+        self._levels_action = QAction("&Image Levels", self)
+        self._levels_action.setShortcut("Ctrl+L")
+        self._levels_action.triggered.connect(self._on_levels_menu_triggered)
+        self._levels_action.setEnabled(False)  # Disabled until image is loaded
+        editing_menu.addAction(self._levels_action)
+        
+        # Track levels window reference
+        self._levels_window = None
 
         # Create central widget with layout
         central_widget = QWidget()
@@ -175,6 +191,9 @@ class MainWindow(QMainWindow):
 
         # Connect operation history changed signal
         self._controller.operation_history_changed.connect(self._on_operation_history_changed)
+
+        # Connect image loaded signal to enable/disable levels menu
+        self._controller.image_loaded.connect(self._on_image_loaded_for_menu)
 
     def _on_load_image(self) -> None:
         """Handle load image menu action."""
@@ -317,6 +336,54 @@ class MainWindow(QMainWindow):
             can_undo = self._controller.can_undo()
             self._controls_panel.update_undo_state(can_undo)
 
+    def _on_image_loaded_for_menu(self, image: ImageModel) -> None:
+        """Handle image loaded signal to enable/disable menu items.
+
+        Args:
+            image: Loaded ImageModel instance
+        """
+        if self._levels_action:
+            self._levels_action.setEnabled(True)
+
+    def _on_levels_menu_triggered(self) -> None:
+        """Handle Image Levels menu item trigger."""
+        # Check if image is loaded
+        if self._controller.image_model is None:
+            QMessageBox.warning(
+                self,
+                "No Image",
+                "Please load an image before using Image Levels tool.",
+            )
+            return
+
+        # Check if window exists and is visible
+        if self._levels_window is not None:
+            # Check if window is still valid (not destroyed)
+            try:
+                if self._levels_window.isVisible():
+                    # Window is already open, just bring it to front
+                    self._levels_window.raise_()
+                    self._levels_window.activateWindow()
+                    return
+                else:
+                    # Window exists but is hidden (closed), clean up reference
+                    self._levels_window = None
+            except RuntimeError:
+                # Window was destroyed, clean up reference
+                self._levels_window = None
+
+        # Create and show levels window
+        self._levels_window = LevelsWindow(self._controller, self)
+        self._levels_window.levels_adjusted.connect(self._controller.apply_levels_adjustment)
+        
+        # Handle window close - set reference to None when window is destroyed
+        def cleanup_window():
+            self._levels_window = None
+        
+        self._levels_window.destroyed.connect(cleanup_window)
+        
+        self._levels_window.show()
+
     def set_ui_enabled(self, enabled: bool) -> None:
         """
         Enable or disable all UI controls to prevent user interaction during processing.
@@ -329,6 +396,8 @@ class MainWindow(QMainWindow):
             self._load_action.setEnabled(enabled)
         if self._save_action:
             self._save_action.setEnabled(enabled)
+        if self._levels_action:
+            self._levels_action.setEnabled(enabled and self._controller.image_model is not None)
 
         # Enable/disable controls panel
         if self._controls_panel:

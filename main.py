@@ -13,6 +13,7 @@ from src.services.background_remover import BackgroundRemover
 from src.services.color_reducer import ColorReducer
 from src.services.image_loader import ImageLoader
 from src.services.image_saver import ImageSaver
+from src.services.levels_adjuster import LevelsAdjuster
 from src.services.openai_background_remover import OpenAIBackgroundRemover
 from src.services.pixelizer import Pixelizer
 from src.views.main_window import MainWindow
@@ -31,6 +32,7 @@ def main() -> None:
     color_reducer = ColorReducer()
     image_saver = ImageSaver()
     background_remover = BackgroundRemover(model=os.getenv('REMBG_MODEL', 'sam'))
+    levels_adjuster = LevelsAdjuster()
 
     # Initialize OpenAI background remover (optional - only if API key is configured)
     openai_background_remover = None
@@ -49,6 +51,7 @@ def main() -> None:
         image_saver=image_saver,
         background_remover=background_remover,
         openai_background_remover=openai_background_remover,
+        levels_adjuster=levels_adjuster,
     )
 
     # Initialize and show main window

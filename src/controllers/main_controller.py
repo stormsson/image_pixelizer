@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from src.services.color_reducer import ColorReducer
     from src.services.image_loader import ImageLoader
     from src.services.image_saver import ImageSaver
+    from src.services.levels_adjuster import LevelsAdjuster
     from src.services.operation_history import OperationHistoryManager
     from src.services.openai_background_remover import OpenAIBackgroundRemover
     from src.services.pixelizer import Pixelizer
@@ -46,6 +47,7 @@ class MainController(QObject):
         color_reducer=None,  # ColorReducer - will be set later
         background_remover: Optional["BackgroundRemover"] = None,
         openai_background_remover: Optional["OpenAIBackgroundRemover"] = None,
+        levels_adjuster: Optional["LevelsAdjuster"] = None,
     ) -> None:
         """
         Initialize controller with dependencies.
@@ -59,6 +61,7 @@ class MainController(QObject):
             color_reducer: Color reduction service
             background_remover: Background removal service (interactive)
             openai_background_remover: OpenAI background removal service (automatic)
+            levels_adjuster: Levels adjustment service (optional)
         """
         super().__init__()
         self._image_model = image_model
@@ -69,6 +72,7 @@ class MainController(QObject):
         self._color_reducer = color_reducer
         self._background_remover = background_remover
         self._openai_background_remover = openai_background_remover
+        self._levels_adjuster = levels_adjuster
         self._statistics: Optional[ImageStatistics] = None
         self._background_removal_thread: Optional[QThread] = None
         self._background_removal_worker: Optional["BackgroundRemovalWorker"] = None
@@ -148,6 +152,68 @@ class MainController(QObject):
             Current ImageStatistics instance or None if no image loaded
         """
         return self._statistics
+
+    def get_current_image(self) -> Optional[ImageModel]:
+        """
+        Get current image model.
+
+        Returns:
+            Current ImageModel instance or None if no image loaded
+        """
+        return self._image_model
+
+    def apply_levels_adjustment(self, adjusted_image: ImageModel) -> None:
+        """
+        Apply levels adjustment to the current image.
+
+        Receives adjusted ImageModel from LevelsWindow, updates the image model,
+        adds to operation history, and emits image_updated signal.
+
+        Args:
+            adjusted_image: ImageModel with levels adjustment applied
+
+        Emits:
+            image_updated: When levels adjustment is applied
+            operation_history_changed: When operation history is updated
+            error_occurred: If adjustment fails
+        """
+        if self._image_model is None:
+            self.error_occurred.emit("No image loaded. Please load an image first.")
+            return
+
+        # Save current image state to operation history before applying operation
+        current_state = ImageModel(
+            width=self._image_model.width,
+            height=self._image_model.height,
+            pixel_data=self._image_model.pixel_data.copy(),
+            original_pixel_data=self._image_model.original_pixel_data.copy(),
+            format=self._image_model.format,
+            has_alpha=self._image_model.has_alpha,
+        )
+
+        # Extract parameters from adjusted image (we'll need to track these)
+        # For now, we'll use a generic operation type
+        # In a full implementation, we might want to track darks_cutoff and lights_cutoff
+        self._operation_history.add_operation("levels_adjustment", current_state)
+        self.operation_history_changed.emit()
+
+        # Update image model
+        self._image_model = ImageModel(
+            width=adjusted_image.width,
+            height=adjusted_image.height,
+            pixel_data=adjusted_image.pixel_data,
+            original_pixel_data=self._image_model.original_pixel_data.copy(),
+            format=adjusted_image.format,
+            has_alpha=adjusted_image.has_alpha,
+        )
+
+        # Update statistics
+        self._update_statistics()
+        if self._statistics:
+            self.statistics_updated.emit(self._statistics)
+
+        # Emit image updated signal
+        self.image_updated.emit(self._image_model)
 
     def _update_statistics(self) -> None:
         """Update statistics from current image model.
