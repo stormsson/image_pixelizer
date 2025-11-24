@@ -292,7 +292,11 @@ class TestAPIRequestConstruction:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
-        remover._call_openai_api(base64_image)
+        import io
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+        remover._call_openai_api(base64_image, image_bytes)
 
         # Verify API was called
         assert mock_client.chat.completions.create.called
@@ -316,7 +320,11 @@ class TestAPIRequestConstruction:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
-        remover._call_openai_api(base64_image)
+        import io
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+        remover._call_openai_api(base64_image, image_bytes)
 
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args[1]["messages"]
@@ -325,7 +333,7 @@ class TestAPIRequestConstruction:
 
     @patch("src.services.openai_background_remover.OpenAI")
     def test_api_request_model_selection(self, mock_openai_class: Mock, remover: OpenAIBackgroundRemover) -> None:
-        """Test that API request uses correct model (gpt-4o)."""
+        """Test that API request uses correct model (gpt-5.1)."""
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
         mock_response = MagicMock()
@@ -335,10 +343,14 @@ class TestAPIRequestConstruction:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
-        remover._call_openai_api(base64_image)
+        import io
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+        remover._call_openai_api(base64_image, image_bytes)
 
         call_args = mock_client.chat.completions.create.call_args
-        assert call_args[1]["model"] == "gpt-4o"
+        assert call_args[1]["model"] == "gpt-5.1"
 
 
 class TestAPIResponseParsing:
@@ -361,7 +373,10 @@ class TestAPIResponseParsing:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
-        response = remover._call_openai_api(base64_image)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+        response, _ = remover._call_openai_api(base64_image, image_bytes)
 
         assert response == "The image contains a person with a blue background"
 
@@ -377,7 +392,10 @@ class TestAPIResponseParsing:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
-        response = remover._call_openai_api(base64_image)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+        response, _ = remover._call_openai_api(base64_image, image_bytes)
 
         assert response == ""
 
@@ -399,9 +417,12 @@ class TestErrorHandling:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
 
         with pytest.raises(OpenAIBackgroundRemovalError) as exc_info:
-            remover._call_openai_api(base64_image)
+            remover._call_openai_api(base64_image, image_bytes)
         assert "Network error" in exc_info.value.user_message or "connection" in exc_info.value.user_message.lower()
 
     @patch("src.services.openai_background_remover.OpenAI")
@@ -417,9 +438,12 @@ class TestErrorHandling:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
 
         with pytest.raises(OpenAIBackgroundRemovalError) as exc_info:
-            remover._call_openai_api(base64_image)
+            remover._call_openai_api(base64_image, image_bytes)
         # Check that error message contains rate limit info (handled in _call_openai_api)
         assert "rate limit" in exc_info.value.user_message.lower() or "429" in str(exc_info.value)
 
@@ -432,9 +456,12 @@ class TestErrorHandling:
 
         image = PILImage.new("RGB", (50, 50), color=(255, 0, 0))
         base64_image = remover._encode_image_to_base64(image)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
 
         with pytest.raises(OpenAIBackgroundRemovalError) as exc_info:
-            remover._call_openai_api(base64_image)
+            remover._call_openai_api(base64_image, image_bytes)
         assert "Failed to process image" in exc_info.value.user_message or "API" in exc_info.value.user_message
 
 
@@ -446,10 +473,10 @@ class TestOptionalFileSaving:
         """Create OpenAIBackgroundRemover instance for testing."""
         return OpenAIBackgroundRemover(api_key="sk-test123")
 
-    @patch("src.services.openai_background_remover.rembg")
+    @patch("rembg.remove")
     @patch("src.services.openai_background_remover.OpenAI")
     def test_save_path_provided_saves_file(
-        self, mock_openai_class: Mock, mock_rembg: Mock, remover: OpenAIBackgroundRemover, tmp_path: Path
+        self, mock_openai_class: Mock, mock_rembg_remove: Mock, remover: OpenAIBackgroundRemover, tmp_path: Path
     ) -> None:
         """Test that save_path provided saves file and returns ImageModel."""
         # Mock OpenAI API
@@ -462,7 +489,7 @@ class TestOptionalFileSaving:
 
         # Mock rembg
         mock_output = PILImage.new("RGBA", (100, 100), color=(255, 87, 51, 255))
-        mock_rembg.remove.return_value = mock_output
+        mock_rembg_remove.return_value = mock_output
 
         image = PILImage.new("RGB", (100, 100), color=(255, 0, 0))
         save_path = tmp_path / "output.png"
@@ -473,10 +500,10 @@ class TestOptionalFileSaving:
         assert isinstance(result, ImageModel)
         assert result.has_alpha is True
 
-    @patch("src.services.openai_background_remover.rembg")
+    @patch("rembg.remove")
     @patch("src.services.openai_background_remover.OpenAI")
     def test_no_save_path_returns_image_data(
-        self, mock_openai_class: Mock, mock_rembg: Mock, remover: OpenAIBackgroundRemover
+        self, mock_openai_class: Mock, mock_rembg_remove: Mock, remover: OpenAIBackgroundRemover
     ) -> None:
         """Test that no save_path returns image data without saving."""
         # Mock OpenAI API
@@ -489,7 +516,7 @@ class TestOptionalFileSaving:
 
         # Mock rembg
         mock_output = PILImage.new("RGBA", (100, 100), color=(255, 87, 51, 255))
-        mock_rembg.remove.return_value = mock_output
+        mock_rembg_remove.return_value = mock_output
 
         image = PILImage.new("RGB", (100, 100), color=(255, 0, 0))
 
@@ -507,10 +534,10 @@ class TestOutputFormatHandling:
         """Create OpenAIBackgroundRemover instance for testing."""
         return OpenAIBackgroundRemover(api_key="sk-test123")
 
-    @patch("src.services.openai_background_remover.rembg")
+    @patch("rembg.remove")
     @patch("src.services.openai_background_remover.OpenAI")
     def test_imagemodel_return_for_app_integration(
-        self, mock_openai_class: Mock, mock_rembg: Mock, remover: OpenAIBackgroundRemover, sample_image_model: ImageModel
+        self, mock_openai_class: Mock, mock_rembg_remove: Mock, remover: OpenAIBackgroundRemover, sample_image_model: ImageModel
     ) -> None:
         """Test that ImageModel input returns ImageModel for app integration."""
         # Mock OpenAI API
@@ -523,7 +550,7 @@ class TestOutputFormatHandling:
 
         # Mock rembg
         mock_output = PILImage.new("RGBA", (100, 100), color=(255, 87, 51, 255))
-        mock_rembg.remove.return_value = mock_output
+        mock_rembg_remove.return_value = mock_output
 
         result = remover.remove_background(sample_image_model)
 
@@ -532,10 +559,10 @@ class TestOutputFormatHandling:
         assert result.height == sample_image_model.height
         assert result.has_alpha is True
 
-    @patch("src.services.openai_background_remover.rembg")
+    @patch("rembg.remove")
     @patch("src.services.openai_background_remover.OpenAI")
     def test_pil_image_return_for_autonomous_use(
-        self, mock_openai_class: Mock, mock_rembg: Mock, remover: OpenAIBackgroundRemover
+        self, mock_openai_class: Mock, mock_rembg_remove: Mock, remover: OpenAIBackgroundRemover
     ) -> None:
         """Test that PIL Image input returns PIL Image for autonomous use."""
         # Mock OpenAI API
@@ -548,7 +575,7 @@ class TestOutputFormatHandling:
 
         # Mock rembg
         mock_output = PILImage.new("RGBA", (100, 100), color=(255, 87, 51, 255))
-        mock_rembg.remove.return_value = mock_output
+        mock_rembg_remove.return_value = mock_output
 
         image = PILImage.new("RGB", (100, 100), color=(255, 0, 0))
         result = remover.remove_background(image)
@@ -556,10 +583,10 @@ class TestOutputFormatHandling:
         assert isinstance(result, PILImage.Image)
         assert result.mode == "RGBA"
 
-    @patch("src.services.openai_background_remover.rembg")
+    @patch("rembg.remove")
     @patch("src.services.openai_background_remover.OpenAI")
     def test_numpy_array_return_for_autonomous_use(
-        self, mock_openai_class: Mock, mock_rembg: Mock, remover: OpenAIBackgroundRemover
+        self, mock_openai_class: Mock, mock_rembg_remove: Mock, remover: OpenAIBackgroundRemover
     ) -> None:
         """Test that NumPy array input returns NumPy array for autonomous use."""
         # Mock OpenAI API
@@ -572,7 +599,7 @@ class TestOutputFormatHandling:
 
         # Mock rembg
         mock_output = PILImage.new("RGBA", (100, 100), color=(255, 87, 51, 255))
-        mock_rembg.remove.return_value = mock_output
+        mock_rembg_remove.return_value = mock_output
 
         array = np.zeros((100, 100, 3), dtype=np.uint8)
         result = remover.remove_background(array)

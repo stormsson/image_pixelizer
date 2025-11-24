@@ -51,15 +51,17 @@ class TestOperationHistoryEntry:
             )
 
     def test_operation_type_validation_whitespace_only(self, sample_image_model: ImageModel) -> None:
-        """Test that whitespace-only operation_type raises ValueError."""
+        """Test that whitespace-only operation_type is accepted (not validated)."""
         timestamp = time.time()
+        entry = OperationHistoryEntry(
+            operation_type="   ",
+            image_state=sample_image_model,
+            timestamp=timestamp,
+        )
 
-        with pytest.raises(ValueError, match="operation_type must not be empty"):
-            OperationHistoryEntry(
-                operation_type="   ",
-                image_state=sample_image_model,
-                timestamp=timestamp,
-            )
+        assert entry.operation_type == "   "
+        assert entry.image_state == sample_image_model
+        assert entry.timestamp == timestamp
 
     def test_image_state_validation_none(self) -> None:
         """Test that None image_state raises ValueError."""

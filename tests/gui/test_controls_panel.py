@@ -305,7 +305,7 @@ class TestOpenAIBackgroundRemovalButton:
         qtbot.addWidget(panel)
 
         button = panel._openai_remove_background_button
-        assert "Automatic" in button.text()
+        assert "OpenAI" in button.text()
         assert button.toolTip() is not None
         assert len(button.toolTip()) > 0
 
@@ -319,8 +319,8 @@ class TestOpenAIBackgroundRemovalButton:
 
         # Both buttons should have different text
         assert automatic_button.text() != interactive_button.text()
-        # Automatic button should mention "Automatic"
-        assert "Automatic" in automatic_button.text()
+        # Automatic button should mention "OpenAI"
+        assert "OpenAI" in automatic_button.text()
         # Interactive button should mention "SAM" or similar
         assert "SAM" in interactive_button.text() or "Interactive" in interactive_button.text()
 

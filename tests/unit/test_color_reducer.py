@@ -258,7 +258,9 @@ class TestColorReducer:
         reducer = ColorReducer()
 
         # Create RGBA image with varying alpha values
-        pixel_data = np.zeros((4, 4, 4), dtype=np.uint8)
+        # Use larger image (10x10 = 100 pixels) so K-Means can succeed
+        # With sensitivity=0.5, k=132, but we'll use explicit k=8 to ensure it works
+        pixel_data = np.zeros((10, 10, 4), dtype=np.uint8)
         pixel_data[:, :, :3] = [255, 0, 0]  # Red RGB
         pixel_data[0, 0, 3] = 255  # Full alpha
         pixel_data[0, 1, 3] = 200  # High alpha (>128)
@@ -266,19 +268,20 @@ class TestColorReducer:
         pixel_data[0, 3, 3] = 50   # Low alpha (<128)
 
         image = ImageModel(
-            width=4,
-            height=4,
+            width=10,
+            height=10,
             pixel_data=pixel_data,
             original_pixel_data=pixel_data.copy(),
             format="PNG",
             has_alpha=True,
         )
 
-        result = reducer.reduce_colors(image, sensitivity=0.5)
+        # Use explicit k=8 to ensure K-Means succeeds (8 < 100 pixels)
+        result = reducer.reduce_colors(image, sensitivity=0.5, k=8)
 
         # Alpha should be binarized: >=128 -> 255, <128 -> 0
         assert result.has_alpha == True
-        assert result.pixel_data.shape == (4, 4, 4)
+        assert result.pixel_data.shape == (10, 10, 4)
         # Values >= 128 should become 255
         assert result.pixel_data[0, 0, 3] == 255
         assert result.pixel_data[0, 1, 3] == 255

@@ -202,11 +202,14 @@ class TestMainControllerStateManagement:
 
     def test_settings_model_updated(self, sample_image_path) -> None:
         """Test that settings model is updated when sliders change."""
+        from src.services.color_reducer import ColorReducer
+        
         settings_model = SettingsModel()
         controller = MainController(
             settings_model=settings_model,
             image_loader=ImageLoader(),
             pixelizer=Pixelizer(),
+            color_reducer=ColorReducer(),
         )
 
         # Load image
