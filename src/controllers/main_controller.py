@@ -241,10 +241,11 @@ class MainController(QObject):
                 self._color_reducer is not None
                 and self._settings_model.color_reduction.is_enabled
             ):
-                sensitivity = self._settings_model.color_reduction.sensitivity
-                pixelized_image = self._color_reducer.reduce_colors(
-                    pixelized_image, sensitivity
-                )
+                bin_count = self._settings_model.color_reduction.bin_count
+                if bin_count is not None:
+                    pixelized_image = self._color_reducer.reduce_colors(
+                        pixelized_image, k=bin_count
+                    )
 
             # Update model (preserve original_pixel_data)
             self._image_model = ImageModel(
@@ -291,9 +292,23 @@ class MainController(QObject):
             return
 
         try:
+            # Convert sensitivity (0.0-1.0) to bin_count for backward compatibility
+            # This method is deprecated - use update_bin_count instead
+            if sensitivity <= 0.0:
+                bin_count = None
+            else:
+                # Map sensitivity to bin counts: 0.0->None, 0.1->256, 0.5->132, 1.0->8
+                max_k = 256
+                min_k = 8
+                k = int(max_k - (sensitivity * (max_k - min_k)))
+                k = max(min_k, k)
+                # Round to nearest valid bin count
+                valid_bins = [4, 8, 16, 32, 64, 128, 256]
+                bin_count = min(valid_bins, key=lambda x: abs(x - k))
+            
             # Update settings
-            self._settings_model.color_reduction.sensitivity = sensitivity
-            self._settings_model.color_reduction.is_enabled = sensitivity > 0.0
+            self._settings_model.color_reduction.bin_count = bin_count
+            # is_enabled is automatically set by the model based on bin_count
 
             # Color reduction should work on the pixelized base state (if pixelization enabled)
             # or on the base state directly (if pixelization disabled)
@@ -328,9 +343,12 @@ class MainController(QObject):
                     base_image = self._pixelizer.pixelize(base_image, pixel_size)
 
             # Apply color reduction
-            reduced_image = self._color_reducer.reduce_colors(
-                base_image, sensitivity
-            )
+            if bin_count is None:
+                reduced_image = base_image
+            else:
+                reduced_image = self._color_reducer.reduce_colors(
+                    base_image, k=bin_count
+                )
 
             # Update model (preserve original_pixel_data)
             self._image_model = ImageModel(
@@ -354,6 +372,109 @@ class MainController(QObject):
             if hasattr(e, "user_message"):
                 error_msg = e.user_message
             self.error_occurred.emit(error_msg)
+
+    def update_bin_count(self, bin_count: Optional[int]) -> None:
+        """
+        Update bin count and apply color reduction.
+
+        Color reduction is applied after pixelization if pixelization is enabled.
+        The dropdown should be disabled during processing (via processing_started/finished signals).
+
+        Args:
+            bin_count: Bin count value (None, 4, 8, 16, 32, 64, 128, 256)
+                - None: Disables color reduction
+                - Integer: Direct k-means cluster count
+
+        Emits:
+            image_updated: When color reduction is applied
+            statistics_updated: When statistics are updated
+            error_occurred: If color reduction fails
+            processing_started: When processing begins (UI should disable dropdown)
+            processing_finished: When processing completes (UI should enable dropdown)
+        """
+        if self._image_model is None:
+            return
+
+        if self._color_reducer is None:
+            self.error_occurred.emit("Color reducer not initialized")
+            return
+
+        try:
+            # Emit processing started signal
+            self.processing_started.emit()
+
+            # Update settings model
+            self._settings_model.color_reduction.bin_count = bin_count
+            # is_enabled is automatically set by the model based on bin_count
+
+            # Color reduction should work on the pixelized base state (if pixelization enabled)
+            # or on the base state directly (if pixelization disabled)
+            if self._base_image_state is None:
+                # Fallback: use current state if base state not set
+                base_image = ImageModel(
+                    width=self._image_model.width,
+                    height=self._image_model.height,
+                    pixel_data=self._image_model.pixel_data.copy(),
+                    original_pixel_data=self._image_model.original_pixel_data.copy(),
+                    format=self._image_model.format,
+                    has_alpha=self._image_model.has_alpha,
+                )
+            else:
+                # Use base state (image after background removal, before pixelization)
+                base_image = ImageModel(
+                    width=self._base_image_state.width,
+                    height=self._base_image_state.height,
+                    pixel_data=self._base_image_state.pixel_data.copy(),
+                    original_pixel_data=self._base_image_state.original_pixel_data.copy(),
+                    format=self._base_image_state.format,
+                    has_alpha=self._base_image_state.has_alpha,
+                )
+
+            # If pixelization is enabled, apply it first on base state
+            if (
+                self._pixelizer is not None
+                and self._settings_model.pixelization.is_enabled
+            ):
+                pixel_size = self._settings_model.pixelization.pixel_size
+                if pixel_size > 1:
+                    base_image = self._pixelizer.pixelize(base_image, pixel_size)
+
+            # Apply color reduction with bin_count as k parameter
+            if bin_count is None:
+                # No color reduction - return pixelized (or original) image
+                reduced_image = base_image
+            else:
+                # Use bin_count directly as k parameter
+                reduced_image = self._color_reducer.reduce_colors(
+                    base_image, k=bin_count
+                )
+
+            # Update model (preserve original_pixel_data)
+            self._image_model = ImageModel(
+                width=reduced_image.width,
+                height=reduced_image.height,
+                pixel_data=reduced_image.pixel_data,
+                original_pixel_data=self._image_model.original_pixel_data.copy(),
+                format=reduced_image.format,
+                has_alpha=reduced_image.has_alpha,
+            )
+
+            # Update statistics
+            self._update_statistics()
+
+            # Emit signals
+            self.image_updated.emit(self._image_model)
+            if self._statistics:
+                self.statistics_updated.emit(self._statistics)
+
+        except Exception as e:
+            error_msg = str(e)
+            if hasattr(e, "user_message"):
+                error_msg = e.user_message
+            self.error_occurred.emit(error_msg)
+        finally:
+            # Always emit processing finished signal
+            self.processing_finished.emit()
 
     def update_hover_color(self, hex_color: str) -> None:
         """
@@ -679,10 +800,11 @@ class MainController(QObject):
                     self._color_reducer is not None
                     and self._settings_model.color_reduction.is_enabled
                 ):
-                    sensitivity = self._settings_model.color_reduction.sensitivity
-                    self._image_model = self._color_reducer.reduce_colors(
-                        self._image_model, sensitivity
-                    )
+                    bin_count = self._settings_model.color_reduction.bin_count
+                    if bin_count is not None:
+                        self._image_model = self._color_reducer.reduce_colors(
+                            self._image_model, k=bin_count
+                        )
 
         # Update statistics
         self._update_statistics()
@@ -766,8 +888,11 @@ class MainController(QObject):
             self._color_reducer is not None
             and self._settings_model.color_reduction.is_enabled
         ):
-            sensitivity = self._settings_model.color_reduction.sensitivity
-            restored_image = self._color_reducer.reduce_colors(restored_image, sensitivity)
+            bin_count = self._settings_model.color_reduction.bin_count
+            if bin_count is not None:
+                restored_image = self._color_reducer.reduce_colors(
+                    restored_image, k=bin_count
+                )
 
         # Update the image model
         self._image_model = ImageModel(
@@ -900,10 +1025,11 @@ class MainController(QObject):
                     self._color_reducer is not None
                     and self._settings_model.color_reduction.is_enabled
                 ):
-                    sensitivity = self._settings_model.color_reduction.sensitivity
-                    self._image_model = self._color_reducer.reduce_colors(
-                        self._image_model, sensitivity
-                    )
+                    bin_count = self._settings_model.color_reduction.bin_count
+                    if bin_count is not None:
+                        self._image_model = self._color_reducer.reduce_colors(
+                            self._image_model, k=bin_count
+                        )
 
         # Update statistics
         self._update_statistics()

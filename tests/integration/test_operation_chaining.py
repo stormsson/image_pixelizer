@@ -114,7 +114,7 @@ class TestOperationChainingWorkflow:
         assert np.all(background_alpha == 0), "Background should remain transparent after pixelization"
 
         # Step 4: Apply color reduction (should work on pixelized image with background removed)
-        controller.update_sensitivity(0.5)
+        controller.update_bin_count(16)
         image_after_color_reduction = controller.image_model
         assert image_after_color_reduction is not None
         assert image_after_color_reduction.has_alpha is True  # Should preserve alpha
@@ -122,7 +122,7 @@ class TestOperationChainingWorkflow:
 
         # Verify color reduction was applied
         # Check that color reduction was applied by verifying settings were updated
-        assert controller._settings_model.color_reduction.sensitivity == 0.5
+        assert controller._settings_model.color_reduction.bin_count == 16
         assert controller._settings_model.color_reduction.is_enabled is True
         # The color-reduced image should still have the same dimensions and alpha channel
         assert image_after_color_reduction.width == 100
@@ -190,11 +190,11 @@ class TestOperationChainingWorkflow:
         assert controller._settings_model.pixelization.is_enabled is True
 
         # Apply color reduction
-        controller.update_sensitivity(0.6)
+        controller.update_bin_count(32)
         state_after_color = controller.image_model.pixel_data.copy()
 
         # Verify color reduction was applied (check settings)
-        assert controller._settings_model.color_reduction.sensitivity == 0.6
+        assert controller._settings_model.color_reduction.bin_count == 32
         assert controller._settings_model.color_reduction.is_enabled is True
 
         # Verify all operations were applied in sequence

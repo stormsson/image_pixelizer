@@ -30,7 +30,7 @@ class TestColorReducer:
             has_alpha=False,
         )
 
-        result = reducer.reduce_colors(image, sensitivity=0.5)
+        result = reducer.reduce_colors(image, k=64)
 
         assert isinstance(result, ImageModel)
         assert result.width == 4
@@ -39,8 +39,8 @@ class TestColorReducer:
         assert result.format == "PNG"
         assert result.has_alpha == False
 
-    def test_reduce_colors_sensitivity_zero(self) -> None:
-        """Test color reduction with sensitivity=0.0 (no reduction)."""
+    def test_reduce_colors_k_none(self) -> None:
+        """Test color reduction with k=None (no reduction)."""
         reducer = ColorReducer()
 
         pixel_data = np.zeros((10, 10, 3), dtype=np.uint8)
@@ -55,13 +55,13 @@ class TestColorReducer:
             has_alpha=False,
         )
 
-        result = reducer.reduce_colors(image, sensitivity=0.0)
+        result = reducer.reduce_colors(image, k=None)
 
         # With sensitivity 0, should return original image
         assert np.array_equal(result.pixel_data, pixel_data)
 
-    def test_reduce_colors_sensitivity_one(self) -> None:
-        """Test color reduction with sensitivity=1.0 (maximum reduction)."""
+    def test_reduce_colors_k_max(self) -> None:
+        """Test color reduction with k at maximum value = 256 (maximum reduction)."""
         reducer = ColorReducer()
 
         # Create image with many similar colors
@@ -79,7 +79,7 @@ class TestColorReducer:
             has_alpha=False,
         )
 
-        result = reducer.reduce_colors(image, sensitivity=1.0)
+        result = reducer.reduce_colors(image, k=256)
 
         # Should have fewer distinct colors than original
         original_colors = ColorReducer.count_distinct_colors(pixel_data)
@@ -103,7 +103,7 @@ class TestColorReducer:
             has_alpha=True,
         )
 
-        result = reducer.reduce_colors(image, sensitivity=0.5)
+        result = reducer.reduce_colors(image, k=64)
 
         assert result.has_alpha == True
         assert result.pixel_data.shape == (4, 4, 4)
@@ -130,7 +130,7 @@ class TestColorReducer:
         )
 
         # Test with explicit k=16
-        result = reducer.reduce_colors(image, sensitivity=0.5, k=16)
+        result = reducer.reduce_colors(image, k=16)
         
         # Should have at most 16 distinct colors
         result_colors = ColorReducer.count_distinct_colors(result.pixel_data)
@@ -152,7 +152,7 @@ class TestColorReducer:
             has_alpha=False,
         )
 
-        result = reducer.reduce_colors(image, sensitivity=0.5)
+        result = reducer.reduce_colors(image)
 
         # Should be a new array, not the same reference
         assert result.pixel_data is not pixel_data
@@ -178,7 +178,7 @@ class TestColorReducer:
         )
 
         original_count = ColorReducer.count_distinct_colors(pixel_data)
-        result = reducer.reduce_colors(image, sensitivity=0.7)
+        result = reducer.reduce_colors(image, k=128)
         result_count = ColorReducer.count_distinct_colors(result.pixel_data)
 
         # Should have fewer or equal colors
@@ -186,33 +186,7 @@ class TestColorReducer:
         # With sensitivity 0.7, should have significantly fewer colors
         assert result_count < original_count
 
-    def test_reduce_colors_higher_sensitivity_more_reduction(self) -> None:
-        """Test that higher sensitivity produces more color reduction."""
-        reducer = ColorReducer()
-
-        # Create image with many colors
-        pixel_data = np.zeros((20, 20, 3), dtype=np.uint8)
-        for i in range(20):
-            for j in range(20):
-                pixel_data[i, j] = [i * 12, j * 12, (i + j) * 6]
-
-        image = ImageModel(
-            width=20,
-            height=20,
-            pixel_data=pixel_data,
-            original_pixel_data=pixel_data.copy(),
-            format="PNG",
-            has_alpha=False,
-        )
-
-        result_low = reducer.reduce_colors(image, sensitivity=0.3)
-        result_high = reducer.reduce_colors(image, sensitivity=0.8)
-
-        count_low = ColorReducer.count_distinct_colors(result_low.pixel_data)
-        count_high = ColorReducer.count_distinct_colors(result_high.pixel_data)
-
-        # Higher sensitivity should result in fewer colors
-        assert count_high <= count_low
+    
 
     def test_count_distinct_colors_basic(self) -> None:
         """Test counting distinct colors in image."""
@@ -277,7 +251,7 @@ class TestColorReducer:
         )
 
         # Use explicit k=8 to ensure K-Means succeeds (8 < 100 pixels)
-        result = reducer.reduce_colors(image, sensitivity=0.5, k=8)
+        result = reducer.reduce_colors(image, k=8)
 
         # Alpha should be binarized: >=128 -> 255, <128 -> 0
         assert result.has_alpha == True

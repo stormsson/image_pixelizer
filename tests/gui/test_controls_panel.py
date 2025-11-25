@@ -25,7 +25,7 @@ class TestControlsPanel:
         qtbot.addWidget(panel)
 
         assert panel.get_pixel_size() == 1
-        assert panel.get_sensitivity() == 0.0
+        assert panel.get_bin_count() is None
 
     def test_pixel_size_slider_range(self, qtbot) -> None:
         """Test pixel size slider has correct range."""
@@ -66,44 +66,66 @@ class TestControlsPanel:
 
         assert panel._pixel_size_spinbox.value() == 15
 
-    def test_sensitivity_slider_range(self, qtbot) -> None:
-        """Test sensitivity slider has correct range."""
+    def test_bin_count_dropdown_options(self, qtbot) -> None:
+        """Test bin count dropdown has correct options."""
         panel = ControlsPanel()
         qtbot.addWidget(panel)
 
-        slider = panel._sensitivity_slider
-        assert slider.minimum() == 0
-        assert slider.maximum() == 100
-        assert slider.value() == 0
+        dropdown = panel._bin_count_dropdown
+        assert dropdown.count() == 8
+        assert dropdown.itemText(0) == "None"
+        assert dropdown.itemText(1) == "4"
+        assert dropdown.itemText(2) == "8"
+        assert dropdown.itemText(3) == "16"
+        assert dropdown.itemText(4) == "32"
+        assert dropdown.itemText(5) == "64"
+        assert dropdown.itemText(6) == "128"
+        assert dropdown.itemText(7) == "256"
+        assert dropdown.currentText() == "None"
 
-    def test_sensitivity_slider_emits_signal(self, qtbot) -> None:
-        """Test sensitivity slider emits signal on value change."""
+    def test_bin_count_dropdown_emits_signal(self, qtbot) -> None:
+        """Test bin count dropdown emits signal on value change."""
         panel = ControlsPanel()
         qtbot.addWidget(panel)
 
         values_received = []
 
-        def on_sensitivity_changed(value: float) -> None:
+        def on_bin_count_changed(value: object) -> None:
             values_received.append(value)
 
-        panel.sensitivity_changed.connect(on_sensitivity_changed)
+        panel.bin_count_changed.connect(on_bin_count_changed)
 
-        # Change slider value (50 = 0.5)
-        panel._sensitivity_slider.setValue(50)
+        # Change dropdown value to "16"
+        panel._bin_count_dropdown.setCurrentText("16")
         qtbot.wait(100)
 
         assert len(values_received) == 1
-        assert abs(values_received[0] - 0.5) < 0.01
+        assert values_received[0] == 16
 
-    def test_sensitivity_spinbox_updates(self, qtbot) -> None:
-        """Test sensitivity spinbox updates when slider changes."""
+    def test_bin_count_dropdown_emits_none(self, qtbot) -> None:
+        """Test bin count dropdown emits None for 'None' option."""
         panel = ControlsPanel()
         qtbot.addWidget(panel)
 
-        panel._sensitivity_slider.setValue(75)  # Should be 0.75
+        values_received = []
+
+        def on_bin_count_changed(value: object) -> None:
+            values_received.append(value)
+
+        panel.bin_count_changed.connect(on_bin_count_changed)
+
+        # First set to a value to ensure change is detected
+        panel._bin_count_dropdown.setCurrentText("16")
+        qtbot.wait(100)
+        
+        # Now set to "None" (this will trigger signal)
+        panel._bin_count_dropdown.setCurrentText("None")
         qtbot.wait(100)
 
-        assert abs(panel._sensitivity_spinbox.value() - 0.75) < 0.01
+        # Should have received both values
+        assert len(values_received) >= 1
+        # The last value should be None
+        assert values_received[-1] is None
 
     def test_get_pixel_size(self, qtbot) -> None:
         """Test get_pixel_size returns current slider value."""
@@ -113,13 +135,21 @@ class TestControlsPanel:
         panel._pixel_size_slider.setValue(25)
         assert panel.get_pixel_size() == 25
 
-    def test_get_sensitivity(self, qtbot) -> None:
-        """Test get_sensitivity returns current slider value as float."""
+    def test_get_bin_count(self, qtbot) -> None:
+        """Test get_bin_count returns current dropdown value."""
         panel = ControlsPanel()
         qtbot.addWidget(panel)
 
-        panel._sensitivity_slider.setValue(80)  # Should be 0.8
-        assert abs(panel.get_sensitivity() - 0.8) < 0.01
+        # Default should be None
+        assert panel.get_bin_count() is None
+
+        # Set to a value
+        panel._bin_count_dropdown.setCurrentText("32")
+        assert panel.get_bin_count() == 32
+
+        # Set back to None
+        panel._bin_count_dropdown.setCurrentText("None")
+        assert panel.get_bin_count() is None
 
     def test_pixel_size_spinbox_updates_slider(self, qtbot) -> None:
         """Test pixel size spinbox updates slider when value is changed manually."""
@@ -143,27 +173,41 @@ class TestControlsPanel:
         assert len(values_received) == 1
         assert values_received[0] == 20
 
-    def test_sensitivity_spinbox_updates_slider(self, qtbot) -> None:
-        """Test sensitivity spinbox updates slider when value is changed manually."""
+    def test_set_bin_count(self, qtbot) -> None:
+        """Test set_bin_count updates dropdown selection."""
         panel = ControlsPanel()
         qtbot.addWidget(panel)
 
-        values_received = []
+        # Set to a value
+        panel.set_bin_count(64)
+        assert panel._bin_count_dropdown.currentText() == "64"
+        assert panel.get_bin_count() == 64
 
-        def on_sensitivity_changed(value: float) -> None:
-            values_received.append(value)
+        # Set to None
+        panel.set_bin_count(None)
+        assert panel._bin_count_dropdown.currentText() == "None"
+        assert panel.get_bin_count() is None
 
-        panel.sensitivity_changed.connect(on_sensitivity_changed)
+        # Set to another value
+        panel.set_bin_count(128)
+        assert panel._bin_count_dropdown.currentText() == "128"
+        assert panel.get_bin_count() == 128
 
-        # Change spinbox value manually
-        panel._sensitivity_spinbox.setValue(0.65)
-        qtbot.wait(100)
+    def test_set_processing_state_disables_dropdown(self, qtbot) -> None:
+        """Test set_processing_state disables/enables dropdown."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
 
-        # Verify slider was updated (0.65 * 100 = 65)
-        assert panel._sensitivity_slider.value() == 65
-        # Verify signal was emitted
-        assert len(values_received) == 1
-        assert abs(values_received[0] - 0.65) < 0.01
+        # Initially enabled
+        assert panel._bin_count_dropdown.isEnabled()
+
+        # Disable during processing
+        panel.set_processing_state(True)
+        assert not panel._bin_count_dropdown.isEnabled()
+
+        # Re-enable after processing
+        panel.set_processing_state(False)
+        assert panel._bin_count_dropdown.isEnabled()
 
     def test_save_button_hidden_initially(self, qtbot) -> None:
         """Test save button is hidden initially when no image is loaded."""

@@ -115,7 +115,7 @@ class TestOperationChaining:
         controller._settings_model.pixelization.pixel_size = 5
 
         # Apply color reduction (should work on current state)
-        controller.update_sensitivity(0.5)
+        controller.update_bin_count(16)
 
         # Verify color reduction was applied to current state
         assert controller._image_model is not None
@@ -191,7 +191,7 @@ class TestOperationChaining:
         )
 
         # Apply color reduction
-        controller.update_sensitivity(0.3)
+        controller.update_bin_count(32)
 
         # Verify transparency is preserved
         assert controller._image_model.has_alpha

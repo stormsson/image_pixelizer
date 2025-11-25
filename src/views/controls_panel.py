@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QDoubleSpinBox,
     QPushButton,
+    QComboBox,
 )
 
 
@@ -20,7 +21,7 @@ class ControlsPanel(QWidget):
 
     # Signals
     pixel_size_changed = Signal(int)  # pixel_size value (1-50)
-    sensitivity_changed = Signal(float)  # sensitivity value (0.0-1.0)
+    bin_count_changed = Signal(object)  # bin_count value (None, 4, 8, 16, 32, 64, 128, 256) - object for Optional[int] compatibility
     save_requested = Signal()  # Emitted when save button is clicked
     remove_background_requested = Signal()  # Emitted when remove background button is clicked
     openai_background_removal_requested = Signal()  # Emitted when automatic remove background button is clicked
@@ -69,32 +70,16 @@ class ControlsPanel(QWidget):
 
         layout.addLayout(pixel_size_row)
 
-        # Sensitivity slider (for color reduction - will be used in Phase 5)
-        sensitivity_label = QLabel("Sensitivity:")
-        sensitivity_label.setWordWrap(True)  # Allow text wrapping
-        layout.addWidget(sensitivity_label)
+        # Bin count dropdown (for color reduction)
+        bin_count_label = QLabel("Color Bins:")
+        bin_count_label.setWordWrap(True)  # Allow text wrapping
+        layout.addWidget(bin_count_label)
 
-        # Horizontal layout for slider and spinbox
-        sensitivity_row = QHBoxLayout()
-        self._sensitivity_slider = QSlider(Qt.Orientation.Horizontal)
-        self._sensitivity_slider.setMinimum(0)
-        self._sensitivity_slider.setMaximum(100)  # 0-100 for slider, convert to 0.0-1.0
-        self._sensitivity_slider.setValue(0)
-        self._sensitivity_slider.valueChanged.connect(self._on_sensitivity_slider_changed)
-        sensitivity_row.addWidget(self._sensitivity_slider)
-
-        self._sensitivity_spinbox = QDoubleSpinBox()
-        self._sensitivity_spinbox.setMinimum(0.0)
-        self._sensitivity_spinbox.setMaximum(1.0)
-        self._sensitivity_spinbox.setValue(0.0)
-        self._sensitivity_spinbox.setSingleStep(0.01)  # Step by 0.01
-        self._sensitivity_spinbox.setDecimals(2)  # Show 2 decimal places
-        self._sensitivity_spinbox.setObjectName("sensitivity_value")
-        self._sensitivity_spinbox.valueChanged.connect(self._on_sensitivity_spinbox_changed)
-        self._sensitivity_spinbox.setMaximumWidth(60)  # Keep it compact
-        sensitivity_row.addWidget(self._sensitivity_spinbox)
-
-        layout.addLayout(sensitivity_row)
+        self._bin_count_dropdown = QComboBox()
+        self._bin_count_dropdown.addItems(["None", "4", "8", "16", "32", "64", "128", "256"])
+        self._bin_count_dropdown.setCurrentText("None")  # Default
+        self._bin_count_dropdown.currentTextChanged.connect(self._on_bin_count_changed)
+        layout.addWidget(self._bin_count_dropdown)
 
         # Add spacing before buttons section
         layout.addSpacing(12)
@@ -157,7 +142,6 @@ class ControlsPanel(QWidget):
 
         # Track if we're updating to prevent circular updates
         self._updating_pixel_size = False
-        self._updating_sensitivity = False
 
     def _on_remove_background_clicked(self) -> None:
         """Handle remove background button click.
@@ -277,31 +261,20 @@ class ControlsPanel(QWidget):
             self._updating_pixel_size = False
             self.pixel_size_changed.emit(value)
 
-    def _on_sensitivity_slider_changed(self, value: int) -> None:
-        """Handle sensitivity slider value change.
+    def _on_bin_count_changed(self, value: str) -> None:
+        """Handle bin count dropdown value change.
 
         Args:
-            value: New sensitivity value from slider (0-100, converted to 0.0-1.0).
-        """
-        if not self._updating_sensitivity:
-            sensitivity = value / 100.0  # Convert 0-100 to 0.0-1.0
-            self._updating_sensitivity = True
-            self._sensitivity_spinbox.setValue(sensitivity)
-            self._updating_sensitivity = False
-            self.sensitivity_changed.emit(sensitivity)
+            value: Selected string ("None", "4", "8", "16", "32", "64", "128", "256")
 
-    def _on_sensitivity_spinbox_changed(self, value: float) -> None:
-        """Handle sensitivity spinbox value change.
-
-        Args:
-            value: New sensitivity value from spinbox (0.0-1.0).
+        Emits:
+            bin_count_changed: With Optional[int] (None for "None", int for others)
         """
-        if not self._updating_sensitivity:
-            slider_value = int(value * 100)  # Convert 0.0-1.0 to 0-100
-            self._updating_sensitivity = True
-            self._sensitivity_slider.setValue(slider_value)
-            self._updating_sensitivity = False
-            self.sensitivity_changed.emit(value)
+        if value == "None":
+            bin_count = None
+        else:
+            bin_count = int(value)
+        self.bin_count_changed.emit(bin_count)
 
     def get_pixel_size(self) -> int:
         """
@@ -312,12 +285,34 @@ class ControlsPanel(QWidget):
         """
         return self._pixel_size_slider.value()
 
-    def get_sensitivity(self) -> float:
+    def get_bin_count(self) -> Optional[int]:
         """
-        Get current sensitivity value.
+        Get current bin count selection.
 
         Returns:
-            Current sensitivity (0.0-1.0)
+            Current bin count (None, 4, 8, 16, 32, 64, 128, 256)
         """
-        return self._sensitivity_slider.value() / 100.0
+        text = self._bin_count_dropdown.currentText()
+        return None if text == "None" else int(text)
+
+    def set_bin_count(self, bin_count: Optional[int]) -> None:
+        """
+        Set dropdown to specified bin count.
+
+        Args:
+            bin_count: Bin count to select (None, 4, 8, 16, 32, 64, 128, 256)
+        """
+        if bin_count is None:
+            self._bin_count_dropdown.setCurrentText("None")
+        else:
+            self._bin_count_dropdown.setCurrentText(str(bin_count))
+
+    def set_processing_state(self, is_processing: bool) -> None:
+        """
+        Enable/disable dropdown based on processing state.
+
+        Args:
+            is_processing: True to disable dropdown, False to enable
+        """
+        self._bin_count_dropdown.setEnabled(not is_processing)
 

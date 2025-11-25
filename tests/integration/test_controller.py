@@ -222,11 +222,11 @@ class TestMainControllerStateManagement:
         assert settings_model.pixelization.pixel_size == 10
         assert settings_model.pixelization.is_enabled is True
 
-        # Update sensitivity
-        controller.update_sensitivity(0.5)
+        # Update bin count
+        controller.update_bin_count(32)
 
         # Verify settings were updated
-        assert settings_model.color_reduction.sensitivity == 0.5
+        assert settings_model.color_reduction.bin_count == 32
         assert settings_model.color_reduction.is_enabled is True
 
     def test_hover_color_cleared(self, sample_image_path) -> None:

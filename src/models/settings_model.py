@@ -1,6 +1,7 @@
 """Settings models for pixelization and color reduction."""
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -34,24 +35,49 @@ class ColorReductionSettings:
     """Configuration for color reduction effect.
 
     Attributes:
-        sensitivity: Color similarity threshold (0.0-1.0). Higher values
-            result in more aggressive color merging and fewer distinct colors.
-            Value of 0.0 means no color reduction.
+        bin_count: Number of color clusters for k-means clustering. Must be one of:
+            None (disables color reduction), 4, 8, 16, 32, 64, 128, 256.
+            Value of None means no color reduction.
         is_enabled: Whether color reduction is currently enabled. Automatically
-            set to True when sensitivity > 0.0.
+            set to True when bin_count is not None.
     """
 
-    sensitivity: float = 0.0
+    bin_count: Optional[int] = None
     is_enabled: bool = False
 
     def __post_init__(self) -> None:
         """Validate color reduction settings after initialization.
 
         Raises:
-            ValueError: If sensitivity is outside valid range (0.0-1.0).
+            ValueError: If bin_count is not None and not a valid power of 2 (4-256).
         """
-        if not 0.0 <= self.sensitivity <= 1.0:
-            raise ValueError("sensitivity must be between 0.0 and 1.0")
+        # Auto-set is_enabled based on bin_count
+        self.is_enabled = self.bin_count is not None
+        
+        # Validate bin_count if provided
+        if self.bin_count is not None:
+            valid_bin_counts = {4, 8, 16, 32, 64, 128, 256}
+            if self.bin_count not in valid_bin_counts:
+                raise ValueError(
+                    f"bin_count must be one of {sorted(valid_bin_counts)} or None, "
+                    f"got {self.bin_count}"
+                )
+    
+    def __setattr__(self, name: str, value: object) -> None:
+        """Override to keep is_enabled in sync with bin_count."""
+        super().__setattr__(name, value)
+        # If bin_count is being set, update is_enabled automatically
+        if name == "bin_count":
+            # Validate if setting a non-None value
+            if value is not None:
+                valid_bin_counts = {4, 8, 16, 32, 64, 128, 256}
+                if value not in valid_bin_counts:
+                    raise ValueError(
+                        f"bin_count must be one of {sorted(valid_bin_counts)} or None, "
+                        f"got {value}"
+                    )
+            # Auto-update is_enabled
+            super().__setattr__("is_enabled", value is not None)
 
 
 @dataclass

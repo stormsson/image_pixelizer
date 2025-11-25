@@ -119,8 +119,8 @@ class MainWindow(QMainWindow):
             self._controls_panel.pixel_size_changed.connect(
                 self._controller.update_pixel_size
             )
-            self._controls_panel.sensitivity_changed.connect(
-                self._controller.update_sensitivity
+            self._controls_panel.bin_count_changed.connect(
+                self._controller.update_bin_count
             )
 
         # Connect image view mouse hover signals to controller
@@ -172,6 +172,15 @@ class MainWindow(QMainWindow):
         # Connect processing state signals
         self._controller.processing_started.connect(lambda: self.set_ui_enabled(False))
         self._controller.processing_finished.connect(lambda: self.set_ui_enabled(True))
+        
+        # Connect processing state to dropdown specifically
+        if self._controls_panel:
+            self._controller.processing_started.connect(
+                lambda: self._controls_panel.set_processing_state(True)
+            )
+            self._controller.processing_finished.connect(
+                lambda: self._controls_panel.set_processing_state(False)
+            )
 
         # Connect operation history changed signal
         self._controller.operation_history_changed.connect(self._on_operation_history_changed)

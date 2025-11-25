@@ -32,7 +32,6 @@ class ColorReducer:
     def reduce_colors(
         self, 
         image: ImageModel, 
-        sensitivity: float = 0.5, 
         k: Optional[int] = None
     ) -> ImageModel:
         """
@@ -43,25 +42,16 @@ class ColorReducer:
             sensitivity: Float 0.0-1.0, controls number of colors (higher = fewer colors).
             k: (Optional) Specific number of colors for K-Means.
         """
-        if sensitivity == 0.0 and k is None:
+        if k is None:
             return self._clone_image(image, image.pixel_data.copy())
 
-        return self._reduce_via_kmeans(image, sensitivity, k)
+        return self._reduce_via_kmeans(image, k)
 
-    def _reduce_via_kmeans(self, image: ImageModel, sensitivity: float, k: Optional[int]) -> ImageModel:
+    def _reduce_via_kmeans(self, image: ImageModel, k: Optional[int]) -> ImageModel:
         """Apply K-Means Clustering to reduce image to exactly K colors."""
         pixel_data = image.pixel_data.copy()
         height, width, channels = pixel_data.shape
         
-        # Determine K (number of clusters)
-        if k is None:
-            if sensitivity <= 0:
-                return self._clone_image(image, pixel_data)
-            
-            max_k = 256
-            min_k = 8
-            k = int(max_k - (sensitivity * (max_k - min_k)))
-            k = max(min_k, k)
 
         # Separate Alpha if exists
         has_alpha = channels == 4
@@ -77,12 +67,13 @@ class ColorReducer:
         pixels = np.float32(pixels)
 
         # 2. Define K-Means criteria
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+        MAX_ITERATIONS_AMOUNT = 10
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, MAX_ITERATIONS_AMOUNT, 1.0)
 
         # 3. Apply K-Means
         try:
             _, labels, centers = cv2.kmeans(
-                pixels, k, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS
+                pixels, k, None, criteria, 10, cv2.KMEANS_PP_CENTERS # cv2.KMEANS_RANDOM_CENTERS
             )
         except Exception as e:
             print(f"K-Means failed: {e}")
