@@ -120,6 +120,59 @@ For detailed usage instructions, see:
 - Undo operation support (up to 20 operations)
 - Save processed images as PNG with transparency support
 
+## Libraries
+
+### External Libraries
+
+**GUI Framework:**
+- **PySide6** (>=6.6.0): Qt6 Python bindings for the desktop GUI interface, providing widgets, signals/slots, and event handling
+
+**Image Processing:**
+- **Pillow** (>=10.0.0): Core image manipulation library for loading, saving, and converting image formats (PNG, JPEG, etc.)
+- **NumPy** (>=1.24.0): High-performance array operations for pixel data manipulation and mathematical operations on image arrays
+
+**AI/ML:**
+- **rembg** (>=2.0.68): AI-powered background removal library supporting multiple models (u2net, SAM, u2netp, etc.)
+- **onnxruntime** (>=1.15.0): Runtime for executing ONNX models used by rembg for AI inference
+
+**API Integration:**
+- **openai** (>=1.0.0): OpenAI Python SDK for Vision API integration in automatic background removal
+
+**Utilities:**
+- **python-dotenv** (>=1.0.0): Environment variable management for loading API keys from `.env` files
+
+**Development Tools:**
+- **pytest** (>=7.4.0): Testing framework
+- **pytest-qt** (>=4.2.0): Qt-specific testing utilities for GUI component testing
+- **ruff** (>=0.1.0): Fast Python linter
+- **black** (>=23.0.0): Code formatter
+- **mypy** (>=1.5.0): Static type checker
+
+### Internal Modules
+
+**Models** (`src/models/`):
+- `image_model.py`: Core image data model with pixel array management and statistics
+- `point_selection.py`: Point selection collection for interactive background removal
+- `settings_model.py`: Application settings and configuration management
+
+**Services** (`src/services/`):
+- `pixelizer.py`: Pixelization algorithm using block averaging
+- `color_reducer.py`: Color reduction using K-Means clustering
+- `background_remover.py`: Interactive background removal service using rembg
+- `openai_background_remover.py`: Automatic background removal via OpenAI API
+- `image_loader.py`: Image loading and format conversion
+- `image_saver.py`: Image saving with PNG transparency support
+- `operation_history.py`: Undo/redo operation history management
+
+**Views** (`src/views/`):
+- `main_window.py`: Main application window and layout
+- `image_view.py`: Image display widget with zoom and pan capabilities
+- `controls_panel.py`: UI controls for pixelization, color reduction, and background removal
+- `status_bar.py`: Status bar for displaying image statistics and messages
+
+**Controllers** (`src/controllers/`):
+- `main_controller.py`: Main application controller coordinating models, services, and views following MVC pattern
+
 ## Development
 
 ### Running Tests
