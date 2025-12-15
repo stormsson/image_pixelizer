@@ -67,7 +67,7 @@ class ColorReducer:
         # --- STEP 1: TRAIN (Find Centers using Downsampled Data) ---
         # K-Means is slow on large images. We resize to a thumbnail to find
         # the dominant colors. This is 99% as accurate but 100x faster.
-        max_train_dim = 200
+        max_train_dim = 250
         scale = min(1.0, max_train_dim / max(height, width))
         
         if scale < 1.0:
