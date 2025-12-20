@@ -394,3 +394,118 @@ class TestOpenAIBackgroundRemovalButton:
         if panel._openai_remove_background_button.isVisible():
             assert not panel._openai_remove_background_button.isEnabled()
 
+
+class TestColorMatchDisplayIntegration:
+    """Tests for ColorMatchDisplay integration in ControlsPanel."""
+
+    def test_color_match_display_exists(self, qtbot) -> None:
+        """Test color match display widget exists in controls panel."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+
+        assert hasattr(panel, "_color_match_display")
+        assert panel._color_match_display is not None
+
+    def test_color_match_display_hidden_initially(self, qtbot) -> None:
+        """Test color match display is hidden initially."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+
+        assert not panel._color_match_display.isVisible()
+
+    def test_update_color_match_with_hex(self, qtbot) -> None:
+        """Test update_color_match updates display with hex code."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # Update with hex color
+        panel.update_color_match("#FF5733")
+        qtbot.wait(100)
+
+        # Display should be visible
+        assert panel._color_match_display.isVisible()
+
+        # Check that squares have been updated
+        assert panel._color_match_display._image_color_square.text() != ""
+
+    def test_update_color_match_with_empty_string(self, qtbot) -> None:
+        """Test update_color_match clears display with empty string."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # First update with color
+        panel.update_color_match("#FF5733")
+        qtbot.wait(100)
+        assert panel._color_match_display.isVisible()
+
+        # Clear with empty string
+        panel.update_color_match("")
+        qtbot.wait(100)
+
+        # Display should be hidden
+        assert not panel._color_match_display.isVisible()
+
+    def test_update_color_match_with_none(self, qtbot) -> None:
+        """Test update_color_match clears display with None."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # First update with color
+        panel.update_color_match("#FF5733")
+        qtbot.wait(100)
+        assert panel._color_match_display.isVisible()
+
+        # Clear with None
+        panel.update_color_match(None)
+        qtbot.wait(100)
+
+        # Display should be hidden
+        assert not panel._color_match_display.isVisible()
+
+    def test_clear_color_match(self, qtbot) -> None:
+        """Test clear_color_match method clears display."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # First update with color
+        panel.update_color_match("#FF5733")
+        qtbot.wait(100)
+        assert panel._color_match_display.isVisible()
+
+        # Clear
+        panel.clear_color_match()
+        qtbot.wait(100)
+
+        # Display should be hidden
+        assert not panel._color_match_display.isVisible()
+
+    def test_color_match_display_position(self, qtbot) -> None:
+        """Test color match display is positioned below save button."""
+        panel = ControlsPanel()
+        qtbot.addWidget(panel)
+        panel.show()
+
+        # Get layout
+        layout = panel.layout()
+        
+        # Find indices of save button and color match display
+        save_button_index = None
+        color_match_index = None
+        
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and item.widget():
+                if item.widget() == panel._save_button:
+                    save_button_index = i
+                elif item.widget() == panel._color_match_display:
+                    color_match_index = i
+        
+        # Color match display should be after save button
+        assert save_button_index is not None
+        assert color_match_index is not None
+        assert color_match_index > save_button_index
+

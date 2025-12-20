@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 
+from src.views.color_match_display import ColorMatchDisplay
+
 
 class ControlsPanel(QWidget):
     """Sidebar widget containing editing controls for image manipulation."""
@@ -138,6 +140,13 @@ class ControlsPanel(QWidget):
         self._save_button.setVisible(False)  # Hidden initially
         layout.addWidget(self._save_button)
 
+        # Add spacing before color match display
+        layout.addSpacing(8)
+
+        # Color match display
+        self._color_match_display = ColorMatchDisplay()
+        layout.addWidget(self._color_match_display)
+
         layout.addStretch()
 
         # Track if we're updating to prevent circular updates
@@ -196,6 +205,7 @@ class ControlsPanel(QWidget):
         self._openai_remove_background_button.setVisible(is_loaded)
         self._save_button.setVisible(is_loaded)
         self._undo_button.setVisible(is_loaded)
+        # Color match display visibility is controlled by hover state, not image loaded state
         # Apply and Cancel buttons are controlled by point selection mode, not image loaded state
 
     def set_point_selection_mode(self, is_active: bool) -> None:
@@ -315,4 +325,22 @@ class ControlsPanel(QWidget):
             is_processing: True to disable dropdown, False to enable
         """
         self._bin_count_dropdown.setEnabled(not is_processing)
+
+    def update_color_match(self, hex_code: Optional[str]) -> None:
+        """
+        Update color match display with hover color.
+
+        Args:
+            hex_code: HEX color code string or None/empty to clear
+        """
+        if self._color_match_display:
+            if hex_code:
+                self._color_match_display.update_color(hex_code)
+            else:
+                self._color_match_display.clear()
+
+    def clear_color_match(self) -> None:
+        """Clear color match display when mouse leaves image."""
+        if self._color_match_display:
+            self._color_match_display.clear()
 

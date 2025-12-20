@@ -132,6 +132,12 @@ class MainWindow(QMainWindow):
                 self._controller.clear_hover_color
             )
 
+        # Connect controller hover color changed signal to color match display
+        if self._controls_panel:
+            self._controller.hover_color_changed.connect(
+                self._controls_panel.update_color_match
+            )
+
         # Connect controls panel save button to controller
         if self._controls_panel:
             self._controls_panel.save_requested.connect(self._on_save_image)
